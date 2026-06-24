@@ -17,6 +17,13 @@
 - 본문(선택): 변경한 이유를 한글로 설명
 - 끝에 `Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>`
 
+## PR (Pull Request)
+
+- 제목은 커밋과 동일한 형식: `<타입>: <한글 요약>`
+- 본문은 [.github/pull_request_template.md](.github/pull_request_template.md) 양식을 따른다
+  (변경 내용 / 변경 이유 / 확인 방법 / 관련 / 체크리스트).
+- 병합 후 작업 브랜치는 삭제한다.
+
 ## 개발일지
 
 - [docs/개발일지.md](docs/개발일지.md)에 배운 점·삽질·해결 과정을 누적 기록.
