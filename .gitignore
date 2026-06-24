@@ -1,0 +1,20 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# Node / React (프론트엔드 추가 시)
+node_modules/
+dist/
+build/
+
+# 환경변수 · 비밀정보
+.env
+*.env.local
+
+# macOS
+.DS_Store
+
+# IDE
+.idea/
