@@ -30,6 +30,25 @@ class TransactionUpdate(BaseModel):
     memo: Optional[str] = None
 
 
+class CategoryRead(BaseModel):
+    """카테고리 응답 (드롭다운용)"""
+    id: int
+    name: str
+    type: str
+    parent_id: Optional[int]
+    color: Optional[str]
+
+    model_config = {"from_attributes": True}
+
+
+class PaymentMethodRead(BaseModel):
+    """결제수단 응답 (드롭다운용)"""
+    id: int
+    name: str
+
+    model_config = {"from_attributes": True}
+
+
 class TransactionRead(BaseModel):
     """거래 응답 (서버 → 클라이언트)"""
     id: int
