@@ -5,6 +5,7 @@ const API = "http://localhost:8000";
 // ── 타입 (백엔드 응답 형태) ──
 type Category = { id: number; name: string; type: string; parent_id: number | null };
 type PaymentMethod = { id: number; name: string };
+type Tag = { id: number; name: string };
 type Transaction = {
   id: number;
   date: string;
@@ -14,6 +15,7 @@ type Transaction = {
   payment_method_id: number | null;
   alias: string | null;
   memo: string | null;
+  tags: string[];
 };
 
 const today = () => new Date().toISOString().slice(0, 10);
@@ -22,6 +24,7 @@ const won = (n: string | number) => "₩" + Math.abs(Number(n)).toLocaleString("
 export default function App() {
   const [categories, setCategories] = useState<Category[]>([]);
   const [methods, setMethods] = useState<PaymentMethod[]>([]);
+  const [allTags, setAllTags] = useState<Tag[]>([]);
   const [txs, setTxs] = useState<Transaction[]>([]);
 
   // 입력 폼 상태
@@ -30,15 +33,21 @@ export default function App() {
   const [amount, setAmount] = useState("");
   const [categoryId, setCategoryId] = useState<string>("");
   const [methodId, setMethodId] = useState<string>("");
+  const [alias, setAlias] = useState("");
   const [memo, setMemo] = useState("");
+  const [tags, setTags] = useState<string[]>([]);
+  const [tagInput, setTagInput] = useState("");
 
   // ── 데이터 로드 ──
   const loadTxs = () =>
     fetch(`${API}/transactions`).then((r) => r.json()).then(setTxs);
+  const loadTags = () =>
+    fetch(`${API}/tags`).then((r) => r.json()).then(setAllTags);
 
   useEffect(() => {
     fetch(`${API}/categories`).then((r) => r.json()).then(setCategories);
     fetch(`${API}/payment-methods`).then((r) => r.json()).then(setMethods);
+    loadTags();
     loadTxs();
   }, []);
 
@@ -64,6 +73,19 @@ export default function App() {
     }));
   }, [categories, type]);
 
+  // ── 태그 입력 ──
+  function addTag(name: string) {
+    const n = name.trim();
+    if (n && !tags.includes(n)) setTags([...tags, n]);
+    setTagInput("");
+  }
+  function onTagKey(e: React.KeyboardEvent) {
+    if (e.key === "Enter" || e.key === ",") {
+      e.preventDefault();
+      addTag(tagInput);
+    }
+  }
+
   // ── 거래 추가 ──
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -77,12 +99,17 @@ export default function App() {
         amount: Number(amount),
         category_id: categoryId ? Number(categoryId) : null,
         payment_method_id: methodId ? Number(methodId) : null,
+        alias: alias || null,
         memo: memo || null,
+        tags,
       }),
     });
     setAmount("");
+    setAlias("");
     setMemo("");
+    setTags([]);
     loadTxs();
+    loadTags();
   }
 
   async function remove(id: number) {
@@ -148,13 +175,41 @@ export default function App() {
               ))}
             </select>
           </label>
+          <label style={S.field}>
+            <span style={S.label}>가맹점</span>
+            <input value={alias} onChange={(e) => setAlias(e.target.value)}
+              placeholder="예: 스타벅스" style={S.input} />
+          </label>
+          <label style={S.field}>
+            <span style={S.label}>메모</span>
+            <input value={memo} onChange={(e) => setMemo(e.target.value)}
+              placeholder="예: 아메리카노" style={S.input} />
+          </label>
         </div>
 
-        <label style={S.field}>
-          <span style={S.label}>메모</span>
-          <input value={memo} onChange={(e) => setMemo(e.target.value)}
-            placeholder="예: 아메리카노" style={S.input} />
-        </label>
+        {/* 태그 */}
+        <div style={S.field}>
+          <span style={S.label}>태그 (Enter로 추가)</span>
+          <div style={S.tagBox}>
+            {tags.map((t) => (
+              <span key={t} style={S.tagChip}>
+                #{t}
+                <span onClick={() => setTags(tags.filter((x) => x !== t))} style={S.tagX}>×</span>
+              </span>
+            ))}
+            <input
+              value={tagInput}
+              onChange={(e) => setTagInput(e.target.value)}
+              onKeyDown={onTagKey}
+              list="tag-suggestions"
+              placeholder={tags.length ? "" : "예: 데이트, 정기권"}
+              style={S.tagInput}
+            />
+            <datalist id="tag-suggestions">
+              {allTags.map((t) => <option key={t.id} value={t.name} />)}
+            </datalist>
+          </div>
+        </div>
 
         <button type="submit" style={S.submit}>저장</button>
       </form>
@@ -165,9 +220,9 @@ export default function App() {
         {txs.length === 0 && <div style={S.empty}>아직 거래가 없어요. 위에서 추가해보세요.</div>}
         {txs.map((t) => (
           <div key={t.id} style={S.row}>
-            <div style={{ flex: 1 }}>
+            <div style={{ flex: 1, minWidth: 0 }}>
               <div style={S.rowTop}>
-                <span style={S.rowName}>{t.memo || catName.get(t.category_id ?? -1) || "(무제)"}</span>
+                <span style={S.rowName}>{t.alias || t.memo || catName.get(t.category_id ?? -1) || "(무제)"}</span>
                 <span style={{ ...S.amount, color: t.type === "income" ? "#16a34a" : "#dc2626" }}>
                   {t.type === "income" ? "+" : "-"}{won(t.amount)}
                 </span>
@@ -176,7 +231,13 @@ export default function App() {
                 {t.date}
                 {t.category_id && ` · ${catName.get(t.category_id)}`}
                 {t.payment_method_id && ` · ${methodName.get(t.payment_method_id)}`}
+                {t.memo && t.alias && ` · ${t.memo}`}
               </div>
+              {t.tags.length > 0 && (
+                <div style={S.rowTags}>
+                  {t.tags.map((tag) => <span key={tag} style={S.rowTag}>#{tag}</span>)}
+                </div>
+              )}
             </div>
             <button onClick={() => remove(t.id)} style={S.del}>삭제</button>
           </div>
@@ -199,12 +260,18 @@ const S: Record<string, any> = {
   field: { display: "flex", flexDirection: "column", gap: 5, marginBottom: 12 },
   label: { fontSize: 12, color: "#6b7280", fontWeight: 500 },
   input: { padding: "9px 11px", borderRadius: 9, border: "1px solid #d1d5db", fontSize: 14, fontFamily: "inherit", outline: "none" },
+  tagBox: { display: "flex", flexWrap: "wrap", gap: 6, alignItems: "center", padding: "7px 9px", border: "1px solid #d1d5db", borderRadius: 9, minHeight: 40 },
+  tagChip: { display: "inline-flex", alignItems: "center", gap: 4, background: "#eff6ff", color: "#1d4ed8", fontSize: 13, fontWeight: 500, padding: "3px 8px", borderRadius: 6 },
+  tagX: { cursor: "pointer", color: "#93c5fd", fontWeight: 700 },
+  tagInput: { flex: 1, minWidth: 80, border: "none", outline: "none", fontSize: 14, fontFamily: "inherit" },
   submit: { width: "100%", padding: "11px 0", background: "#3b82f6", color: "white", border: "none", borderRadius: 10, fontSize: 15, fontWeight: 600, cursor: "pointer", marginTop: 4 },
   empty: { color: "#9ca3af", fontSize: 14, textAlign: "center", padding: "24px 0" },
-  row: { display: "flex", alignItems: "center", gap: 12, padding: "12px 0", borderBottom: "1px solid #f1f5f9" },
+  row: { display: "flex", alignItems: "flex-start", gap: 12, padding: "12px 0", borderBottom: "1px solid #f1f5f9" },
   rowTop: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 3 },
   rowName: { fontSize: 14, fontWeight: 600 },
   amount: { fontSize: 15, fontWeight: 700, fontVariantNumeric: "tabular-nums" },
   rowSub: { fontSize: 12, color: "#9ca3af" },
+  rowTags: { display: "flex", flexWrap: "wrap", gap: 5, marginTop: 6 },
+  rowTag: { fontSize: 11, color: "#1d4ed8", background: "#eff6ff", padding: "2px 7px", borderRadius: 5 },
   del: { padding: "5px 10px", background: "#f9fafb", border: "1px solid #e5e7eb", borderRadius: 7, fontSize: 12, color: "#6b7280", cursor: "pointer", flexShrink: 0 },
 };

@@ -3,7 +3,7 @@ from datetime import date as date_type
 from decimal import Decimal
 from typing import Literal, Optional
 
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 
 
 class TransactionCreate(BaseModel):
@@ -16,6 +16,7 @@ class TransactionCreate(BaseModel):
     raw_merchant: Optional[str] = None
     alias: Optional[str] = None
     memo: Optional[str] = None
+    tags: list[str] = []                   # 태그 이름 목록 (없으면 빈 리스트)
 
 
 class TransactionUpdate(BaseModel):
@@ -49,6 +50,14 @@ class PaymentMethodRead(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class TagRead(BaseModel):
+    """태그 응답 (자동완성용)"""
+    id: int
+    name: str
+
+    model_config = {"from_attributes": True}
+
+
 class TransactionRead(BaseModel):
     """거래 응답 (서버 → 클라이언트)"""
     id: int
@@ -61,5 +70,12 @@ class TransactionRead(BaseModel):
     alias: Optional[str]
     memo: Optional[str]
     source: str
+    tags: list[str] = []
 
-    model_config = {"from_attributes": True}   # ORM 객체 → 스키마 자동 변환 허용
+    model_config = {"from_attributes": True}
+
+    @field_validator("tags", mode="before")
+    @classmethod
+    def _tag_names(cls, v):
+        # ORM의 Tag 객체 리스트를 이름 문자열 리스트로 변환
+        return [t.name if hasattr(t, "name") else t for t in v]   # ORM 객체 → 스키마 자동 변환 허용

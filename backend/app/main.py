@@ -53,10 +53,32 @@ def list_payment_methods(db: Session = Depends(get_db)):
     return db.query(models.PaymentMethod).order_by(models.PaymentMethod.id).all()
 
 
+@app.get("/tags", response_model=list[schemas.TagRead])
+def list_tags(db: Session = Depends(get_db)):
+    """태그 목록 (자동완성용)"""
+    return db.query(models.Tag).order_by(models.Tag.name).all()
+
+
+def _attach_tags(tx: models.Transaction, tag_names: list[str], db: Session) -> None:
+    """태그 이름 목록을 거래에 연결한다. 없는 태그는 새로 만든다(get-or-create)."""
+    for raw in tag_names:
+        name = raw.strip()
+        if not name:
+            continue
+        tag = db.query(models.Tag).filter(models.Tag.name == name).first()
+        if tag is None:
+            tag = models.Tag(name=name)
+            db.add(tag)
+        tx.tags.append(tag)
+
+
 @app.post("/transactions", response_model=schemas.TransactionRead, status_code=201)
 def create_transaction(payload: schemas.TransactionCreate, db: Session = Depends(get_db)):
     """거래 추가"""
-    tx = models.Transaction(**payload.model_dump())
+    data = payload.model_dump()
+    tag_names = data.pop("tags", [])
+    tx = models.Transaction(**data)
+    _attach_tags(tx, tag_names, db)
     db.add(tx)
     db.commit()
     db.refresh(tx)
