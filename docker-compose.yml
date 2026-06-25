@@ -29,6 +29,17 @@ services:
     volumes:
       - ./backend:/app          # 내 소스를 컨테이너에 연결 → 코드 고치면 즉시 반영(hot reload)
 
+  frontend:
+    build: ./frontend
+    container_name: ledger_frontend
+    ports:
+      - "5173:5173"             # localhost:5173 으로 웹 화면 접속
+    depends_on:
+      - backend
+    volumes:
+      - ./frontend:/app         # 소스 연결 (hot reload)
+      - /app/node_modules       # 익명 볼륨: 위 마운트가 컨테이너 안 node_modules를 덮어쓰는 것 방지
+
 # 위에서 쓴 볼륨을 선언. 컨테이너를 지웠다 만들어도 이 안의 데이터는 살아남는다.
 volumes:
   db_data:

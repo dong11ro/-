@@ -2,10 +2,12 @@
 from contextlib import asynccontextmanager
 
 from fastapi import Depends, FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 
 from . import models, schemas
-from .database import Base, engine, get_db
+from .database import Base, SessionLocal, engine, get_db
+from .seed import seed_defaults
 
 
 @asynccontextmanager
@@ -13,10 +15,24 @@ async def lifespan(app: FastAPI):
     # 앱이 켜질 때: models.py의 모든 테이블을 DB에 생성 (이미 있으면 건너뜀)
     # ※ 이번 단계 한정. 다음 단계에서 Alembic 마이그레이션으로 교체 예정.
     Base.metadata.create_all(bind=engine)
+    # 기본 카테고리·결제수단 시딩 (비어있을 때만)
+    db = SessionLocal()
+    try:
+        seed_defaults(db)
+    finally:
+        db.close()
     yield
 
 
 app = FastAPI(title="가계부 API", lifespan=lifespan)
+
+# 프론트엔드(localhost:5173)에서 API 호출 허용 (개발용)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:5173"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 
 @app.get("/")
@@ -25,10 +41,44 @@ def health():
     return {"status": "ok"}
 
 
+@app.get("/categories", response_model=list[schemas.CategoryRead])
+def list_categories(db: Session = Depends(get_db)):
+    """카테고리 목록 (드롭다운용)"""
+    return db.query(models.Category).order_by(models.Category.id).all()
+
+
+@app.get("/payment-methods", response_model=list[schemas.PaymentMethodRead])
+def list_payment_methods(db: Session = Depends(get_db)):
+    """결제수단 목록 (드롭다운용)"""
+    return db.query(models.PaymentMethod).order_by(models.PaymentMethod.id).all()
+
+
+@app.get("/tags", response_model=list[schemas.TagRead])
+def list_tags(db: Session = Depends(get_db)):
+    """태그 목록 (자동완성용)"""
+    return db.query(models.Tag).order_by(models.Tag.name).all()
+
+
+def _attach_tags(tx: models.Transaction, tag_names: list[str], db: Session) -> None:
+    """태그 이름 목록을 거래에 연결한다. 없는 태그는 새로 만든다(get-or-create)."""
+    for raw in tag_names:
+        name = raw.strip()
+        if not name:
+            continue
+        tag = db.query(models.Tag).filter(models.Tag.name == name).first()
+        if tag is None:
+            tag = models.Tag(name=name)
+            db.add(tag)
+        tx.tags.append(tag)
+
+
 @app.post("/transactions", response_model=schemas.TransactionRead, status_code=201)
 def create_transaction(payload: schemas.TransactionCreate, db: Session = Depends(get_db)):
     """거래 추가"""
-    tx = models.Transaction(**payload.model_dump())
+    data = payload.model_dump()
+    tag_names = data.pop("tags", [])
+    tx = models.Transaction(**data)
+    _attach_tags(tx, tag_names, db)
     db.add(tx)
     db.commit()
     db.refresh(tx)
