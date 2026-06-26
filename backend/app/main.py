@@ -1,7 +1,8 @@
 """FastAPI 앱: 시작 시 테이블 생성 + 거래 CRUD API"""
 from contextlib import asynccontextmanager
+from datetime import date as date_type
 
-from fastapi import Depends, FastAPI, HTTPException
+from fastapi import Depends, FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 
@@ -86,12 +87,25 @@ def create_transaction(payload: schemas.TransactionCreate, db: Session = Depends
 @app.get("/transactions", response_model=list[schemas.TransactionRead])
 def list_transactions(
     category_id: int | None = None,
+    payment_method_id: int | None = None,
+    tags: list[str] = Query(default=[]),
+    date_from: date_type | None = None,
+    date_to: date_type | None = None,
     db: Session = Depends(get_db),
 ):
-    """거래 목록 (최신순). category_id가 오면 해당 카테고리만 필터."""
+    """거래 목록 (최신순). 주어진 필터를 모두 AND로 적용. 없는 필터는 무시."""
     q = db.query(models.Transaction)
     if category_id is not None:
         q = q.filter(models.Transaction.category_id == category_id)
+    if payment_method_id is not None:
+        q = q.filter(models.Transaction.payment_method_id == payment_method_id)
+    if tags:
+        # 선택한 태그 중 하나라도 달린 거래 (EXISTS 서브쿼리 → 중복행 없음)
+        q = q.filter(models.Transaction.tags.any(models.Tag.name.in_(tags)))
+    if date_from is not None:
+        q = q.filter(models.Transaction.date >= date_from)
+    if date_to is not None:
+        q = q.filter(models.Transaction.date <= date_to)
     return q.order_by(
         models.Transaction.date.desc(), models.Transaction.id.desc()
     ).all()

@@ -21,6 +21,18 @@ type Transaction = {
 const today = () => new Date().toISOString().slice(0, 10);
 const won = (n: string | number) => "₩" + Math.abs(Number(n)).toLocaleString("ko-KR");
 
+// 기간 프리셋 → 날짜 범위(YYYY-MM-DD). 로컬 시간 기준 포맷(타임존 어긋남 방지).
+function periodRange(period: string): { from?: string; to?: string } {
+  const fmt = (d: Date) =>
+    `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  const now = new Date();
+  const y = now.getFullYear(), m = now.getMonth();
+  if (period === "이번 달") return { from: fmt(new Date(y, m, 1)), to: fmt(new Date(y, m + 1, 0)) };
+  if (period === "지난 달") return { from: fmt(new Date(y, m - 1, 1)), to: fmt(new Date(y, m, 0)) };
+  if (period === "최근 3개월") return { from: fmt(new Date(y, m - 2, 1)), to: fmt(new Date(y, m + 1, 0)) };
+  return {}; // 전체
+}
+
 export default function App() {
   const [categories, setCategories] = useState<Category[]>([]);
   const [methods, setMethods] = useState<PaymentMethod[]>([]);
@@ -38,13 +50,24 @@ export default function App() {
   const [tags, setTags] = useState<string[]>([]);
   const [tagInput, setTagInput] = useState("");
 
-  // 필터 상태 (골격: 카테고리 단일 필터 하나만)
+  // 필터 상태 (전부 단일선택, 다중선택 패널은 다음 단계)
   const [filterCategoryId, setFilterCategoryId] = useState<string>("");
+  const [filterPaymentId, setFilterPaymentId] = useState<string>("");
+  const [filterTag, setFilterTag] = useState<string>("");
+  const [filterPeriod, setFilterPeriod] = useState<string>("전체");
 
   // ── 데이터 로드 ──
   const loadTxs = () => {
-    const qs = filterCategoryId ? `?category_id=${filterCategoryId}` : "";
-    return fetch(`${API}/transactions${qs}`).then((r) => r.json()).then(setTxs);
+    const p = new URLSearchParams();
+    if (filterCategoryId) p.set("category_id", filterCategoryId);
+    if (filterPaymentId) p.set("payment_method_id", filterPaymentId);
+    if (filterTag) p.append("tags", filterTag);
+    const { from, to } = periodRange(filterPeriod);
+    if (from) p.set("date_from", from);
+    if (to) p.set("date_to", to);
+    const qs = p.toString();
+    return fetch(`${API}/transactions${qs ? `?${qs}` : ""}`)
+      .then((r) => r.json()).then(setTxs);
   };
   const loadTags = () =>
     fetch(`${API}/tags`).then((r) => r.json()).then(setAllTags);
@@ -59,7 +82,7 @@ export default function App() {
   // 거래 목록은 필터가 바뀔 때마다 재조회 (최초 마운트 포함)
   useEffect(() => {
     loadTxs();
-  }, [filterCategoryId]);
+  }, [filterCategoryId, filterPaymentId, filterTag, filterPeriod]);
 
   // 이름 빠른 조회용 맵
   const catName = useMemo(() => {
@@ -235,27 +258,45 @@ export default function App() {
 
       {/* ── 거래 목록 ── */}
       <div style={S.card}>
-        <div style={S.listHeader}>
+        <div style={S.listHeaderCol}>
           <span style={S.formTitle}>거래 내역 ({txs.length})</span>
-          {/* 필터 (골격: 카테고리 하나) */}
-          <select
-            value={filterCategoryId}
-            onChange={(e) => setFilterCategoryId(e.target.value)}
-            style={S.filterSelect}
-          >
-            <option value="">전체 카테고리</option>
-            {filterGroups.map((g) =>
-              g.children.length > 0 ? (
-                <optgroup key={g.parent.id} label={g.parent.name}>
-                  {g.children.map((c) => (
-                    <option key={c.id} value={c.id}>{c.name}</option>
-                  ))}
-                </optgroup>
-              ) : (
-                <option key={g.parent.id} value={g.parent.id}>{g.parent.name}</option>
-              )
-            )}
-          </select>
+          {/* 필터바 (기간 / 카테고리 / 결제수단 / 태그) */}
+          <div style={S.filterBar}>
+            <select value={filterPeriod} onChange={(e) => setFilterPeriod(e.target.value)} style={S.filterSelect}>
+              {["전체", "이번 달", "지난 달", "최근 3개월"].map((p) => (
+                <option key={p} value={p}>{p}</option>
+              ))}
+            </select>
+
+            <select value={filterCategoryId} onChange={(e) => setFilterCategoryId(e.target.value)} style={S.filterSelect}>
+              <option value="">전체 카테고리</option>
+              {filterGroups.map((g) =>
+                g.children.length > 0 ? (
+                  <optgroup key={g.parent.id} label={g.parent.name}>
+                    {g.children.map((c) => (
+                      <option key={c.id} value={c.id}>{c.name}</option>
+                    ))}
+                  </optgroup>
+                ) : (
+                  <option key={g.parent.id} value={g.parent.id}>{g.parent.name}</option>
+                )
+              )}
+            </select>
+
+            <select value={filterPaymentId} onChange={(e) => setFilterPaymentId(e.target.value)} style={S.filterSelect}>
+              <option value="">전체 결제수단</option>
+              {methods.map((m) => (
+                <option key={m.id} value={m.id}>{m.name}</option>
+              ))}
+            </select>
+
+            <select value={filterTag} onChange={(e) => setFilterTag(e.target.value)} style={S.filterSelect}>
+              <option value="">전체 태그</option>
+              {allTags.map((t) => (
+                <option key={t.id} value={t.name}>#{t.name}</option>
+              ))}
+            </select>
+          </div>
         </div>
         {txs.length === 0 && <div style={S.empty}>아직 거래가 없어요. 위에서 추가해보세요.</div>}
         {txs.map((t) => (
@@ -305,7 +346,8 @@ const S: Record<string, any> = {
   tagX: { cursor: "pointer", color: "#93c5fd", fontWeight: 700 },
   tagInput: { flex: 1, minWidth: 80, border: "none", outline: "none", fontSize: 14, fontFamily: "inherit" },
   submit: { width: "100%", padding: "11px 0", background: "#3b82f6", color: "white", border: "none", borderRadius: 10, fontSize: 15, fontWeight: 600, cursor: "pointer", marginTop: 4 },
-  listHeader: { display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 },
+  listHeaderCol: { display: "flex", flexDirection: "column", gap: 10, marginBottom: 14 },
+  filterBar: { display: "flex", flexWrap: "wrap", gap: 8 },
   filterSelect: { padding: "7px 10px", borderRadius: 8, border: "1px solid #d1d5db", fontSize: 13, fontFamily: "inherit", background: "white", cursor: "pointer", color: "#374151" },
   empty: { color: "#9ca3af", fontSize: 14, textAlign: "center", padding: "24px 0" },
   row: { display: "flex", alignItems: "flex-start", gap: 12, padding: "12px 0", borderBottom: "1px solid #f1f5f9" },
