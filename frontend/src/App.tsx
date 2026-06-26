@@ -38,18 +38,28 @@ export default function App() {
   const [tags, setTags] = useState<string[]>([]);
   const [tagInput, setTagInput] = useState("");
 
+  // 필터 상태 (골격: 카테고리 단일 필터 하나만)
+  const [filterCategoryId, setFilterCategoryId] = useState<string>("");
+
   // ── 데이터 로드 ──
-  const loadTxs = () =>
-    fetch(`${API}/transactions`).then((r) => r.json()).then(setTxs);
+  const loadTxs = () => {
+    const qs = filterCategoryId ? `?category_id=${filterCategoryId}` : "";
+    return fetch(`${API}/transactions${qs}`).then((r) => r.json()).then(setTxs);
+  };
   const loadTags = () =>
     fetch(`${API}/tags`).then((r) => r.json()).then(setAllTags);
 
+  // 참조 데이터는 처음 한 번만 로드
   useEffect(() => {
     fetch(`${API}/categories`).then((r) => r.json()).then(setCategories);
     fetch(`${API}/payment-methods`).then((r) => r.json()).then(setMethods);
     loadTags();
-    loadTxs();
   }, []);
+
+  // 거래 목록은 필터가 바뀔 때마다 재조회 (최초 마운트 포함)
+  useEffect(() => {
+    loadTxs();
+  }, [filterCategoryId]);
 
   // 이름 빠른 조회용 맵
   const catName = useMemo(() => {
@@ -72,6 +82,15 @@ export default function App() {
       children: ofType.filter((c) => c.parent_id === p.id),
     }));
   }, [categories, type]);
+
+  // 필터 드롭다운용: 전체 카테고리를 대분류>소분류로 그룹
+  const filterGroups = useMemo(() => {
+    const parents = categories.filter((c) => c.parent_id === null);
+    return parents.map((p) => ({
+      parent: p,
+      children: categories.filter((c) => c.parent_id === p.id),
+    }));
+  }, [categories]);
 
   // ── 태그 입력 ──
   function addTag(name: string) {
@@ -216,7 +235,28 @@ export default function App() {
 
       {/* ── 거래 목록 ── */}
       <div style={S.card}>
-        <div style={S.formTitle}>거래 내역 ({txs.length})</div>
+        <div style={S.listHeader}>
+          <span style={S.formTitle}>거래 내역 ({txs.length})</span>
+          {/* 필터 (골격: 카테고리 하나) */}
+          <select
+            value={filterCategoryId}
+            onChange={(e) => setFilterCategoryId(e.target.value)}
+            style={S.filterSelect}
+          >
+            <option value="">전체 카테고리</option>
+            {filterGroups.map((g) =>
+              g.children.length > 0 ? (
+                <optgroup key={g.parent.id} label={g.parent.name}>
+                  {g.children.map((c) => (
+                    <option key={c.id} value={c.id}>{c.name}</option>
+                  ))}
+                </optgroup>
+              ) : (
+                <option key={g.parent.id} value={g.parent.id}>{g.parent.name}</option>
+              )
+            )}
+          </select>
+        </div>
         {txs.length === 0 && <div style={S.empty}>아직 거래가 없어요. 위에서 추가해보세요.</div>}
         {txs.map((t) => (
           <div key={t.id} style={S.row}>
@@ -265,6 +305,8 @@ const S: Record<string, any> = {
   tagX: { cursor: "pointer", color: "#93c5fd", fontWeight: 700 },
   tagInput: { flex: 1, minWidth: 80, border: "none", outline: "none", fontSize: 14, fontFamily: "inherit" },
   submit: { width: "100%", padding: "11px 0", background: "#3b82f6", color: "white", border: "none", borderRadius: 10, fontSize: 15, fontWeight: 600, cursor: "pointer", marginTop: 4 },
+  listHeader: { display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 },
+  filterSelect: { padding: "7px 10px", borderRadius: 8, border: "1px solid #d1d5db", fontSize: 13, fontFamily: "inherit", background: "white", cursor: "pointer", color: "#374151" },
   empty: { color: "#9ca3af", fontSize: 14, textAlign: "center", padding: "24px 0" },
   row: { display: "flex", alignItems: "flex-start", gap: 12, padding: "12px 0", borderBottom: "1px solid #f1f5f9" },
   rowTop: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 3 },

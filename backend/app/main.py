@@ -84,13 +84,17 @@ def create_transaction(payload: schemas.TransactionCreate, db: Session = Depends
 
 
 @app.get("/transactions", response_model=list[schemas.TransactionRead])
-def list_transactions(db: Session = Depends(get_db)):
-    """거래 목록 (최신순)"""
-    return (
-        db.query(models.Transaction)
-        .order_by(models.Transaction.date.desc(), models.Transaction.id.desc())
-        .all()
-    )
+def list_transactions(
+    category_id: int | None = None,
+    db: Session = Depends(get_db),
+):
+    """거래 목록 (최신순). category_id가 오면 해당 카테고리만 필터."""
+    q = db.query(models.Transaction)
+    if category_id is not None:
+        q = q.filter(models.Transaction.category_id == category_id)
+    return q.order_by(
+        models.Transaction.date.desc(), models.Transaction.id.desc()
+    ).all()
 
 
 @app.get("/transactions/{tx_id}", response_model=schemas.TransactionRead)
