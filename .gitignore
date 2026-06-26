@@ -9,6 +9,7 @@ node_modules/
 dist/
 build/
 .vite/
+*.tsbuildinfo
 
 # 환경변수 · 비밀정보
 .env

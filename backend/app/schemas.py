@@ -29,6 +29,7 @@ class TransactionUpdate(BaseModel):
     raw_merchant: Optional[str] = None
     alias: Optional[str] = None
     memo: Optional[str] = None
+    tags: Optional[list[str]] = None       # None이면 태그 안 건드림, 리스트면 통째로 교체
 
 
 class CategoryRead(BaseModel):

@@ -128,8 +128,14 @@ def update_transaction(
     tx = db.get(models.Transaction, tx_id)
     if tx is None:
         raise HTTPException(status_code=404, detail="거래를 찾을 수 없음")
-    for field, value in payload.model_dump(exclude_unset=True).items():
+    data = payload.model_dump(exclude_unset=True)
+    tag_names = data.pop("tags", None)
+    for field, value in data.items():
         setattr(tx, field, value)
+    if tag_names is not None:
+        # 태그가 오면 기존 연결을 비우고 새로 부착 (통째 교체)
+        tx.tags.clear()
+        _attach_tags(tx, tag_names, db)
     db.commit()
     db.refresh(tx)
     return tx
