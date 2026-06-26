@@ -14,7 +14,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 # 소스코드 복사
 COPY ./app ./app
 
-# 컨테이너가 켜질 때 실행할 명령: uvicorn으로 FastAPI 서버 기동
-#   --host 0.0.0.0 : 컨테이너 바깥에서도 접속 허용
-#   --reload       : 코드 고치면 자동 재시작 (개발 편의)
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+# 컨테이너가 켜질 때: 먼저 DB 마이그레이션 적용 → 그다음 서버 기동
+#   alembic upgrade head : 미적용 마이그레이션을 DB에 반영 (스키마 최신화)
+#   uvicorn --reload     : 코드 고치면 자동 재시작 (개발 편의)
+CMD ["sh", "-c", "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload"]

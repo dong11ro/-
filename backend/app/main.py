@@ -6,16 +6,14 @@ from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 
 from . import models, schemas
-from .database import Base, SessionLocal, engine, get_db
+from .database import SessionLocal, get_db
 from .seed import seed_defaults
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # 앱이 켜질 때: models.py의 모든 테이블을 DB에 생성 (이미 있으면 건너뜀)
-    # ※ 이번 단계 한정. 다음 단계에서 Alembic 마이그레이션으로 교체 예정.
-    Base.metadata.create_all(bind=engine)
-    # 기본 카테고리·결제수단 시딩 (비어있을 때만)
+    # 스키마는 Alembic이 관리한다 (컨테이너 시작 시 `alembic upgrade head`가 먼저 실행됨).
+    # 여기서는 기본 카테고리·결제수단 시딩만 (비어있을 때만).
     db = SessionLocal()
     try:
         seed_defaults(db)
