@@ -26,6 +26,28 @@ function periodRange(period: string): { from?: string; to?: string } {
   return {}; // 전체
 }
 
+// 입력 경로 → 뱃지 표시
+const SOURCE_BADGE: Record<string, { label: string; bg: string; color: string }> = {
+  manual: { label: "수동", bg: "#f1f5f9", color: "#64748b" },
+  csv: { label: "CSV", bg: "#dbeafe", color: "#1d4ed8" },
+  template: { label: "고정", bg: "#fef3c7", color: "#92400e" },
+  ocr: { label: "OCR", bg: "#e0e7ff", color: "#4338ca" },
+};
+
+const PencilIcon = () => (
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+    strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M12 20h9" /><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" />
+  </svg>
+);
+const TrashIcon = () => (
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+    strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M3 6h18" /><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+    <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
+  </svg>
+);
+
 // 모달 상태: 닫힘(null) / 추가 / 수정(대상 거래 포함)
 type ModalState = null | { mode: "add" } | { mode: "edit"; tx: Transaction };
 
@@ -68,6 +90,7 @@ export default function App() {
 
   // 이름 빠른 조회용 맵
   const catName = useMemo(() => new Map(categories.map((c) => [c.id, c.name] as [number, string])), [categories]);
+  const catColor = useMemo(() => new Map(categories.map((c) => [c.id, c.color] as [number, string | null])), [categories]);
   const methodName = useMemo(() => new Map(methods.map((m) => [m.id, m.name] as [number, string])), [methods]);
 
   // 필터 드롭다운용: 전체 카테고리를 대분류>소분류로 그룹
@@ -176,32 +199,41 @@ export default function App() {
         {dateGroups.map((g) => (
           <div key={g.date}>
             <div style={S.dateHeader}>{dateLabel(g.date)}</div>
-            {g.items.map((t) => (
-              <div key={t.id} style={S.row}>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={S.rowTop}>
-                    <span style={S.rowName}>{t.alias || t.memo || catName.get(t.category_id ?? -1) || "(무제)"}</span>
+            {g.items.map((t) => {
+              const name = t.alias || t.memo || catName.get(t.category_id ?? -1) || "(무제)";
+              const color = catColor.get(t.category_id ?? -1) || "#9ca3af";
+              const badge = SOURCE_BADGE[t.source] ?? SOURCE_BADGE.manual;
+              return (
+                <div key={t.id} style={S.row}>
+                  {/* 카테고리 색 아바타 (이름 첫 글자) */}
+                  <div style={{ ...S.avatar, background: color + "22", color }}>{name[0]}</div>
+
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={S.rowTop}>
+                      <span style={S.rowName}>{name}</span>
+                      {t.tags.map((tag) => <span key={tag} style={S.rowTag}>#{tag}</span>)}
+                      <span style={{ ...S.srcBadge, background: badge.bg, color: badge.color }}>{badge.label}</span>
+                    </div>
+                    <div style={S.rowSub}>
+                      {t.category_id && catName.get(t.category_id)}
+                      {t.payment_method_id && ` · ${methodName.get(t.payment_method_id)}`}
+                      {t.memo && t.alias && ` · ${t.memo}`}
+                      {t.raw_merchant && ` · 원본: ${t.raw_merchant}`}
+                    </div>
+                  </div>
+
+                  <div style={S.rowRight}>
                     <span style={{ ...S.amount, color: t.type === "income" ? "#16a34a" : "#dc2626" }}>
                       {t.type === "income" ? "+" : "-"}{won(t.amount)}
                     </span>
-                  </div>
-                  <div style={S.rowSub}>
-                    {t.category_id && catName.get(t.category_id)}
-                    {t.payment_method_id && ` · ${methodName.get(t.payment_method_id)}`}
-                    {t.memo && t.alias && ` · ${t.memo}`}
-                  </div>
-                  {t.tags.length > 0 && (
-                    <div style={S.rowTags}>
-                      {t.tags.map((tag) => <span key={tag} style={S.rowTag}>#{tag}</span>)}
+                    <div style={S.rowBtns}>
+                      <button onClick={() => setModal({ mode: "edit", tx: t })} style={S.iconEdit} title="수정"><PencilIcon /></button>
+                      <button onClick={() => remove(t.id)} style={S.iconDel} title="삭제"><TrashIcon /></button>
                     </div>
-                  )}
+                  </div>
                 </div>
-                <div style={S.rowBtns}>
-                  <button onClick={() => setModal({ mode: "edit", tx: t })} style={S.editBtn}>수정</button>
-                  <button onClick={() => remove(t.id)} style={S.del}>삭제</button>
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         ))}
       </div>
@@ -239,14 +271,16 @@ const S: Record<string, any> = {
   summaryCount: { fontSize: 12.5, fontWeight: 600, color: "#6b7280" },
   summaryAmts: { display: "flex", gap: 14, fontSize: 13, fontWeight: 600, fontVariantNumeric: "tabular-nums" },
   dateHeader: { fontSize: 12, fontWeight: 700, color: "#9ca3af", padding: "12px 2px 4px" },
-  row: { display: "flex", alignItems: "flex-start", gap: 12, padding: "12px 0", borderBottom: "1px solid #f1f5f9" },
-  rowTop: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 3 },
+  row: { display: "flex", alignItems: "flex-start", gap: 11, padding: "12px 0", borderBottom: "1px solid #f1f5f9" },
+  avatar: { width: 36, height: 36, borderRadius: 10, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14, fontWeight: 700 },
+  rowTop: { display: "flex", flexWrap: "wrap", alignItems: "center", gap: 6, marginBottom: 3 },
   rowName: { fontSize: 14, fontWeight: 600 },
-  amount: { fontSize: 15, fontWeight: 700, fontVariantNumeric: "tabular-nums" },
   rowSub: { fontSize: 12, color: "#9ca3af" },
-  rowTags: { display: "flex", flexWrap: "wrap", gap: 5, marginTop: 6 },
   rowTag: { fontSize: 11, color: "#1d4ed8", background: "#eff6ff", padding: "2px 7px", borderRadius: 5 },
-  rowBtns: { display: "flex", gap: 6, flexShrink: 0 },
-  editBtn: { padding: "5px 10px", background: "#eff6ff", border: "1px solid #dbeafe", borderRadius: 7, fontSize: 12, color: "#1d4ed8", cursor: "pointer" },
-  del: { padding: "5px 10px", background: "#f9fafb", border: "1px solid #e5e7eb", borderRadius: 7, fontSize: 12, color: "#6b7280", cursor: "pointer" },
+  srcBadge: { fontSize: 10, fontWeight: 700, padding: "2px 6px", borderRadius: 5 },
+  rowRight: { display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 8, flexShrink: 0 },
+  amount: { fontSize: 15, fontWeight: 700, fontVariantNumeric: "tabular-nums" },
+  rowBtns: { display: "flex", gap: 6 },
+  iconEdit: { display: "flex", padding: 6, background: "#eff6ff", border: "1px solid #dbeafe", borderRadius: 7, color: "#1d4ed8", cursor: "pointer" },
+  iconDel: { display: "flex", padding: 6, background: "#fef2f2", border: "1px solid #fee2e2", borderRadius: 7, color: "#dc2626", cursor: "pointer" },
 };

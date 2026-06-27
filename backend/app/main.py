@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 
 from . import models, schemas
 from .database import SessionLocal, get_db
-from .seed import seed_defaults
+from .seed import backfill_category_colors, seed_defaults
 
 
 @asynccontextmanager
@@ -18,6 +18,7 @@ async def lifespan(app: FastAPI):
     db = SessionLocal()
     try:
         seed_defaults(db)
+        backfill_category_colors(db)  # 카테고리 색 채우기 (없는 것만)
     finally:
         db.close()
     yield
