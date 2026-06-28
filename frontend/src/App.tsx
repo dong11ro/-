@@ -9,13 +9,8 @@ const API = "http://localhost:8000";
 
 const won = (n: string | number) => "₩" + Math.abs(Number(n)).toLocaleString("ko-KR");
 
-// 태그 색: 이름을 해시해 팔레트에서 고정 색 선택 (스키마에 색 없으므로 프론트에서 파생)
+// 태그 색 팔레트 (스키마에 색 없으므로 프론트에서 부여; 목록 순서대로 배정해 충돌 최소화)
 const TAG_COLORS = ["#3b82f6", "#ec4899", "#f59e0b", "#14b8a6", "#8b5cf6", "#ef4444", "#0ea5e9", "#84cc16"];
-function tagColor(name: string): string {
-  let h = 0;
-  for (const ch of name) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
-  return TAG_COLORS[h % TAG_COLORS.length];
-}
 
 // 날짜 그룹 헤더 라벨: "6월 27일 (금)"
 function dateLabel(d: string): string {
@@ -188,6 +183,13 @@ export default function App() {
   const catName = useMemo(() => new Map(categories.map((c) => [c.id, c.name] as [number, string])), [categories]);
   const catColor = useMemo(() => new Map(categories.map((c) => [c.id, c.color] as [number, string | null])), [categories]);
   const methodName = useMemo(() => new Map(methods.map((m) => [m.id, m.name] as [number, string])), [methods]);
+  // 태그 → 색 (목록 순서대로 배정 → 8개 이내면 서로 다른 색)
+  const tagColorMap = useMemo(() => {
+    const m = new Map<string, string>();
+    allTags.forEach((t, i) => m.set(t.name, TAG_COLORS[i % TAG_COLORS.length]));
+    return m;
+  }, [allTags]);
+  const tagColor = (name: string) => tagColorMap.get(name) ?? "#6b7280";
 
   // 필터 드롭다운용: 전체 카테고리를 대분류>소분류로 그룹
   const filterGroups = useMemo(() => {
