@@ -37,6 +37,8 @@ export default function DashboardView() {
   const [ranking, setRanking] = useState<RankItem[]>([]);
   const [merchants, setMerchants] = useState<Merchant[]>([]);
   const [comparison, setComparison] = useState<Comparison | null>(null);
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [pickerYear, setPickerYear] = useState(() => new Date().getFullYear());
 
   useEffect(() => {
     const q = `?month=${month}`;
@@ -50,13 +52,62 @@ export default function DashboardView() {
   const maxRank = Math.max(1, ...ranking.map((c) => c.amount));
   const maxMerchant = Math.max(1, ...merchants.map((mc) => mc.amount));
 
+  // 미래 차단용 현재 시점
+  const now = new Date();
+  const curYear = now.getFullYear();
+  const curMonth = now.getMonth() + 1;
+  const atCurrent = month >= thisMonth();                 // 이번 달 이상이면 다음달 불가
+  const isFuture = (yy: number, mm: number) => yy > curYear || (yy === curYear && mm > curMonth);
+
+  function pickMonth(mm: number) {
+    setMonth(`${pickerYear}-${String(mm).padStart(2, "0")}`);
+    setPickerOpen(false);
+  }
+
   return (
     <div style={S.page}>
-      {/* 월 이동 */}
+      {/* 월 이동 + 연/월 피커 */}
       <div style={S.monthNav}>
         <button onClick={() => setMonth(shiftMonth(month, -1))} style={S.navBtn}>‹</button>
-        <span style={S.monthLabel}>{y}년 {m}월</span>
-        <button onClick={() => setMonth(shiftMonth(month, 1))} style={S.navBtn}>›</button>
+        <button onClick={() => { setPickerYear(y); setPickerOpen((o) => !o); }} style={S.monthLabelBtn}>
+          {y}년 {m}월 ▾
+        </button>
+        <button
+          onClick={() => !atCurrent && setMonth(shiftMonth(month, 1))}
+          disabled={atCurrent}
+          style={{ ...S.navBtn, ...(atCurrent ? S.navDisabled : {}) }}
+        >›</button>
+
+        {pickerOpen && (
+          <>
+            <div onClick={() => setPickerOpen(false)} style={S.backdrop} />
+            <div style={S.picker}>
+              <div style={S.pickerYearRow}>
+                <button onClick={() => setPickerYear((yr) => yr - 1)} style={S.yearBtn}>‹</button>
+                <span style={S.pickerYear}>{pickerYear}년</span>
+                <button
+                  onClick={() => pickerYear < curYear && setPickerYear((yr) => yr + 1)}
+                  disabled={pickerYear >= curYear}
+                  style={{ ...S.yearBtn, ...(pickerYear >= curYear ? S.navDisabled : {}) }}
+                >›</button>
+              </div>
+              <div style={S.monthGrid}>
+                {Array.from({ length: 12 }, (_, i) => i + 1).map((mm) => {
+                  const fut = isFuture(pickerYear, mm);
+                  const sel = pickerYear === y && mm === m;
+                  return (
+                    <button
+                      key={mm}
+                      onClick={() => !fut && pickMonth(mm)}
+                      disabled={fut}
+                      style={{ ...S.monthCell, ...(sel ? S.monthCellSel : {}), ...(fut ? S.monthCellFut : {}) }}
+                    >{mm}월</button>
+                  );
+                })}
+              </div>
+            </div>
+          </>
+        )}
       </div>
 
       {/* KPI 카드 */}
@@ -149,9 +200,19 @@ export default function DashboardView() {
 
 const S: Record<string, any> = {
   page: { maxWidth: 920, margin: "0 auto", padding: "28px 24px", color: "#111827" },
-  monthNav: { display: "flex", alignItems: "center", gap: 14, marginBottom: 20 },
+  monthNav: { display: "flex", alignItems: "center", gap: 14, marginBottom: 20, position: "relative" },
   navBtn: { width: 34, height: 34, borderRadius: 9, border: "1px solid #e5e7eb", background: "white", fontSize: 18, cursor: "pointer", color: "#374151" },
-  monthLabel: { fontSize: 20, fontWeight: 700, letterSpacing: "-0.4px" },
+  navDisabled: { opacity: 0.35, cursor: "default" },
+  monthLabelBtn: { fontSize: 20, fontWeight: 700, letterSpacing: "-0.4px", background: "none", border: "none", cursor: "pointer", color: "#111827", fontFamily: "inherit", padding: "2px 6px" },
+  backdrop: { position: "fixed", inset: 0, zIndex: 40 },
+  picker: { position: "absolute", top: 44, left: 44, zIndex: 41, background: "white", borderRadius: 12, padding: 14, boxShadow: "0 10px 30px rgba(0,0,0,.18)", border: "1px solid #e5e7eb", width: 260 },
+  pickerYearRow: { display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 },
+  yearBtn: { width: 30, height: 30, borderRadius: 8, border: "1px solid #e5e7eb", background: "white", fontSize: 16, cursor: "pointer", color: "#374151" },
+  pickerYear: { fontSize: 15, fontWeight: 700 },
+  monthGrid: { display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 6 },
+  monthCell: { padding: "9px 0", borderRadius: 8, border: "1px solid #e5e7eb", background: "white", fontSize: 13, fontWeight: 600, color: "#374151", cursor: "pointer", fontFamily: "inherit" },
+  monthCellSel: { background: "#3b82f6", color: "white", borderColor: "#3b82f6" },
+  monthCellFut: { opacity: 0.3, cursor: "default" },
   kpiRow: { display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 12, marginBottom: 12 },
   kpi: { background: "white", borderRadius: 12, padding: "16px 18px", boxShadow: "0 1px 3px rgba(0,0,0,.05)" },
   kpiLabel: { fontSize: 12, color: "#6b7280", fontWeight: 500, marginBottom: 8 },
