@@ -9,6 +9,9 @@ const API = "http://localhost:8000";
 
 const won = (n: string | number) => "₩" + Math.abs(Number(n)).toLocaleString("ko-KR");
 
+// 태그 색 팔레트 (스키마에 색 없으므로 프론트에서 부여; 목록 순서대로 배정해 충돌 최소화)
+const TAG_COLORS = ["#3b82f6", "#ec4899", "#f59e0b", "#14b8a6", "#8b5cf6", "#ef4444", "#0ea5e9", "#84cc16"];
+
 // 날짜 그룹 헤더 라벨: "6월 27일 (금)"
 function dateLabel(d: string): string {
   const dt = new Date(d + "T00:00:00");
@@ -71,6 +74,12 @@ export default function App() {
   const [filterPeriod, setFilterPeriod] = useState("전체");
   const [openPanel, setOpenPanel] = useState<null | "period" | "category" | "payment" | "tag">(null);
 
+  // 팝업 내 임시 선택(draft) — 적용하기 눌러야 실제 필터에 반영
+  const [draftCats, setDraftCats] = useState<number[]>([]);
+  const [draftPays, setDraftPays] = useState<number[]>([]);
+  const [draftTags, setDraftTags] = useState<string[]>([]);
+  const [draftPeriod, setDraftPeriod] = useState("전체");
+
   // ── 데이터 로드 ──
   const loadTxs = () => {
     const p = new URLSearchParams();
@@ -97,21 +106,39 @@ export default function App() {
     loadTxs();
   }, [filterCategoryIds, filterPaymentIds, filterTags, filterPeriod]);
 
-  // 필터 토글 헬퍼 (수동 변경 시 적용된 즐겨찾기는 해제 → 개별 칩으로 전환)
-  const toggleNum = (arr: number[], set: (v: number[]) => void, id: number) => {
-    setActiveSaved(null);
-    set(arr.includes(id) ? arr.filter((x) => x !== id) : [...arr, id]);
-  };
-  const toggleTag = (name: string) => {
-    setActiveSaved(null);
-    setFilterTags(filterTags.includes(name) ? filterTags.filter((x) => x !== name) : [...filterTags, name]);
-  };
-  const setPeriod = (p: string) => { setActiveSaved(null); setFilterPeriod(p); };
   const resetFilters = () => {
     setActiveSaved(null);
     setFilterCategoryIds([]); setFilterPaymentIds([]); setFilterTags([]); setFilterPeriod("전체");
   };
-  const togglePanel = (name: typeof openPanel) => setOpenPanel(openPanel === name ? null : name);
+
+  // 필터 팝업 열기 — 현재 필터값을 draft로 복사
+  function openFilter(name: NonNullable<typeof openPanel>) {
+    setDraftCats(filterCategoryIds);
+    setDraftPays(filterPaymentIds);
+    setDraftTags(filterTags);
+    setDraftPeriod(filterPeriod);
+    setOpenPanel(name);
+  }
+  // 적용하기 — 열린 필터의 draft를 실제 필터로 반영
+  function applyFilter() {
+    setActiveSaved(null);
+    if (openPanel === "category") setFilterCategoryIds(draftCats);
+    else if (openPanel === "payment") setFilterPaymentIds(draftPays);
+    else if (openPanel === "tag") setFilterTags(draftTags);
+    else if (openPanel === "period") setFilterPeriod(draftPeriod);
+    setOpenPanel(null);
+  }
+  // 초기화(팝업 내) — 열린 필터의 draft만 비움
+  function resetDraft() {
+    if (openPanel === "category") setDraftCats([]);
+    else if (openPanel === "payment") setDraftPays([]);
+    else if (openPanel === "tag") setDraftTags([]);
+    else if (openPanel === "period") setDraftPeriod("전체");
+  }
+  const toggleDraftNum = (arr: number[], set: (v: number[]) => void, id: number) =>
+    set(arr.includes(id) ? arr.filter((x) => x !== id) : [...arr, id]);
+  const toggleDraftTag = (name: string) =>
+    setDraftTags(draftTags.includes(name) ? draftTags.filter((x) => x !== name) : [...draftTags, name]);
 
   // ── 필터 즐겨찾기 ──
   const hasActiveFilter =
@@ -156,12 +183,25 @@ export default function App() {
   const catName = useMemo(() => new Map(categories.map((c) => [c.id, c.name] as [number, string])), [categories]);
   const catColor = useMemo(() => new Map(categories.map((c) => [c.id, c.color] as [number, string | null])), [categories]);
   const methodName = useMemo(() => new Map(methods.map((m) => [m.id, m.name] as [number, string])), [methods]);
+  // 태그 → 색 (목록 순서대로 배정 → 8개 이내면 서로 다른 색)
+  const tagColorMap = useMemo(() => {
+    const m = new Map<string, string>();
+    allTags.forEach((t, i) => m.set(t.name, TAG_COLORS[i % TAG_COLORS.length]));
+    return m;
+  }, [allTags]);
+  const tagColor = (name: string) => tagColorMap.get(name) ?? "#6b7280";
 
   // 필터 드롭다운용: 전체 카테고리를 대분류>소분류로 그룹
   const filterGroups = useMemo(() => {
     const parents = categories.filter((c) => c.parent_id === null);
     return parents.map((p) => ({ parent: p, children: categories.filter((c) => c.parent_id === p.id) }));
   }, [categories]);
+
+  // 카테고리 팝업에서 선택 가능한 항목 id (소분류, 없으면 대분류)
+  const categoryOptionIds = useMemo(
+    () => filterGroups.flatMap((g) => (g.children.length ? g.children.map((c) => c.id) : [g.parent.id])),
+    [filterGroups],
+  );
 
   // 요약: 현재 목록의 건수·총수입·총지출
   const summary = useMemo(() => {
@@ -245,64 +285,21 @@ export default function App() {
             </button>
           </div>
 
-          {/* 필터 칩 버튼들 */}
+          {/* 필터 칩 버튼들 (누르면 팝업) */}
           <div style={S.filterBar}>
-            <button onClick={() => togglePanel("period")} style={S.chip(filterPeriod !== "전체")}>
+            <button onClick={() => openFilter("period")} style={S.chip(filterPeriod !== "전체")}>
               {filterPeriod !== "전체" ? filterPeriod : "기간"} ▾
             </button>
-            <button onClick={() => togglePanel("category")} style={S.chip(filterCategoryIds.length > 0)}>
+            <button onClick={() => openFilter("category")} style={S.chip(filterCategoryIds.length > 0)}>
               카테고리{filterCategoryIds.length ? ` ${filterCategoryIds.length}` : ""} ▾
             </button>
-            <button onClick={() => togglePanel("payment")} style={S.chip(filterPaymentIds.length > 0)}>
+            <button onClick={() => openFilter("payment")} style={S.chip(filterPaymentIds.length > 0)}>
               결제수단{filterPaymentIds.length ? ` ${filterPaymentIds.length}` : ""} ▾
             </button>
-            <button onClick={() => togglePanel("tag")} style={S.chip(filterTags.length > 0)}>
+            <button onClick={() => openFilter("tag")} style={S.chip(filterTags.length > 0)}>
               태그{filterTags.length ? ` ${filterTags.length}` : ""} ▾
             </button>
           </div>
-
-          {/* 펼쳐진 패널 */}
-          {openPanel === "period" && (
-            <div style={S.panel}>
-              {["전체", "이번 달", "지난 달", "최근 3개월"].map((p) => (
-                <button key={p} onClick={() => { setPeriod(p); setOpenPanel(null); }} style={S.opt(filterPeriod === p)}>{p}</button>
-              ))}
-            </div>
-          )}
-          {openPanel === "category" && (
-            <div style={S.panel}>
-              {filterGroups.map((g) => (
-                <div key={g.parent.id} style={{ width: "100%" }}>
-                  <div style={S.panelGroup}>{g.parent.name}</div>
-                  <div style={S.optWrap}>
-                    {(g.children.length ? g.children : [g.parent]).map((c) => (
-                      <button key={c.id} onClick={() => toggleNum(filterCategoryIds, setFilterCategoryIds, c.id)} style={S.opt(filterCategoryIds.includes(c.id))}>{c.name}</button>
-                    ))}
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-          {openPanel === "payment" && (
-            <div style={S.panel}>
-              <div style={S.optWrap}>
-                {methods.map((m) => (
-                  <button key={m.id} onClick={() => toggleNum(filterPaymentIds, setFilterPaymentIds, m.id)} style={S.opt(filterPaymentIds.includes(m.id))}>{m.name}</button>
-                ))}
-              </div>
-            </div>
-          )}
-          {openPanel === "tag" && (
-            <div style={S.panel}>
-              {allTags.length === 0 ? <div style={S.panelEmpty}>태그가 없어요.</div> : (
-                <div style={S.optWrap}>
-                  {allTags.map((t) => (
-                    <button key={t.id} onClick={() => toggleTag(t.name)} style={S.opt(filterTags.includes(t.name))}>#{t.name}</button>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
 
           {/* 적용 표시: 즐겨찾기면 이름 칩 하나, 직접 필터면 개별 칩 */}
           {activeSaved ? (
@@ -348,7 +345,9 @@ export default function App() {
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={S.rowTop}>
                       <span style={S.rowName}>{name}</span>
-                      {t.tags.map((tag) => <span key={tag} style={S.rowTag}>#{tag}</span>)}
+                      {t.tags.map((tag) => (
+                        <span key={tag} style={{ ...S.rowTag, background: tagColor(tag) + "22", color: tagColor(tag) }}>#{tag}</span>
+                      ))}
                       <span style={{ ...S.srcBadge, background: badge.bg, color: badge.color }}>{badge.label}</span>
                     </div>
                     <div style={S.rowSub}>
@@ -410,6 +409,65 @@ export default function App() {
           />
         </Modal>
       )}
+
+      {/* ── 필터 팝업 (기간/카테고리/결제수단/태그) ── */}
+      {openPanel && (
+        <Modal onClose={() => setOpenPanel(null)}>
+          <div style={S.popHeader}>
+            <span style={S.popTitle}>
+              {openPanel === "period" ? "기간" : openPanel === "category" ? "카테고리" : openPanel === "payment" ? "결제수단" : "태그"}
+            </span>
+            {openPanel === "category" && <button onClick={() => setDraftCats(categoryOptionIds)} style={S.selectAll}>전체 선택</button>}
+            {openPanel === "payment" && <button onClick={() => setDraftPays(methods.map((m) => m.id))} style={S.selectAll}>전체 선택</button>}
+            {openPanel === "tag" && allTags.length > 0 && <button onClick={() => setDraftTags(allTags.map((t) => t.name))} style={S.selectAll}>전체 선택</button>}
+          </div>
+
+          <div style={S.popBody}>
+            {openPanel === "period" && ["전체", "이번 달", "지난 달", "최근 3개월"].map((p) => (
+              <label key={p} style={S.checkRow}>
+                <input type="radio" name="period" checked={draftPeriod === p} onChange={() => setDraftPeriod(p)} />
+                <span>{p}</span>
+              </label>
+            ))}
+
+            {openPanel === "category" && filterGroups.map((g) => (
+              <div key={g.parent.id} style={S.catGroupBlock}>
+                <div style={S.catGroup}>
+                  <span style={{ ...S.dot, background: g.parent.color ?? "#9ca3af" }} />
+                  {g.parent.name}
+                </div>
+                {(g.children.length ? g.children : [g.parent]).map((c) => (
+                  <label key={c.id} style={S.checkRowIndent}>
+                    <input type="checkbox" checked={draftCats.includes(c.id)} onChange={() => toggleDraftNum(draftCats, setDraftCats, c.id)} />
+                    <span>{c.name}</span>
+                  </label>
+                ))}
+              </div>
+            ))}
+
+            {openPanel === "payment" && methods.map((m) => (
+              <label key={m.id} style={S.checkRow}>
+                <input type="checkbox" checked={draftPays.includes(m.id)} onChange={() => toggleDraftNum(draftPays, setDraftPays, m.id)} />
+                <span>{m.name}</span>
+              </label>
+            ))}
+
+            {openPanel === "tag" && (allTags.length === 0
+              ? <div style={S.popEmpty}>태그가 없어요.</div>
+              : allTags.map((t) => (
+                <label key={t.id} style={S.checkRow}>
+                  <input type="checkbox" checked={draftTags.includes(t.name)} onChange={() => toggleDraftTag(t.name)} />
+                  <span style={{ ...S.tagPill, background: tagColor(t.name) + "22", color: tagColor(t.name) }}>#{t.name}</span>
+                </label>
+              )))}
+          </div>
+
+          <div style={S.popFooter}>
+            <button onClick={resetDraft} style={S.popReset}>초기화</button>
+            <button onClick={applyFilter} style={S.popApply}>적용하기</button>
+          </div>
+        </Modal>
+      )}
     </div>
   );
 }
@@ -427,11 +485,21 @@ const S: Record<string, any> = {
   saveFavBtn: { padding: "6px 12px", background: "#fffbeb", color: "#b45309", border: "1px solid #fde68a", borderRadius: 8, fontSize: 12.5, fontWeight: 600, fontFamily: "inherit", cursor: "pointer" },
   filterBar: { display: "flex", flexWrap: "wrap", gap: 8 },
   chip: (active: boolean) => ({ padding: "7px 12px", borderRadius: 20, border: `1px solid ${active ? "#3b82f6" : "#d1d5db"}`, background: active ? "#eff6ff" : "white", color: active ? "#1d4ed8" : "#374151", fontSize: 13, fontWeight: 600, fontFamily: "inherit", cursor: "pointer" }),
-  panel: { display: "flex", flexWrap: "wrap", gap: 8, padding: 12, background: "#f8fafc", borderRadius: 10, border: "1px solid #e5e7eb" },
-  panelGroup: { width: "100%", fontSize: 11, fontWeight: 700, color: "#9ca3af", marginBottom: 6, marginTop: 2 },
-  optWrap: { display: "flex", flexWrap: "wrap", gap: 6, width: "100%" },
-  opt: (active: boolean) => ({ padding: "5px 11px", borderRadius: 7, border: `1px solid ${active ? "#3b82f6" : "#e5e7eb"}`, background: active ? "#3b82f6" : "white", color: active ? "white" : "#374151", fontSize: 12.5, fontWeight: 500, fontFamily: "inherit", cursor: "pointer" }),
-  panelEmpty: { fontSize: 13, color: "#9ca3af", padding: "8px 4px" },
+  // 필터 팝업
+  popHeader: { display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 },
+  popTitle: { fontSize: 16, fontWeight: 700 },
+  selectAll: { padding: "4px 10px", background: "#eff6ff", color: "#1d4ed8", border: "none", borderRadius: 6, fontSize: 12.5, fontWeight: 600, fontFamily: "inherit", cursor: "pointer" },
+  popBody: { maxHeight: "55vh", overflowY: "auto", marginBottom: 14 },
+  catGroupBlock: { marginBottom: 12 },
+  catGroup: { display: "flex", alignItems: "center", gap: 7, fontSize: 13, fontWeight: 700, color: "#374151", marginBottom: 4 },
+  dot: { width: 9, height: 9, borderRadius: "50%", flexShrink: 0 },
+  checkRow: { display: "flex", alignItems: "center", gap: 9, padding: "8px 4px", fontSize: 14, color: "#374151", cursor: "pointer" },
+  checkRowIndent: { display: "flex", alignItems: "center", gap: 9, padding: "6px 4px 6px 18px", fontSize: 14, color: "#374151", cursor: "pointer" },
+  tagPill: { fontSize: 13, fontWeight: 600, padding: "3px 10px", borderRadius: 6 },
+  popEmpty: { fontSize: 14, color: "#9ca3af", textAlign: "center", padding: "20px 0" },
+  popFooter: { display: "flex", gap: 8 },
+  popReset: { flex: 1, padding: "11px 0", background: "#f1f5f9", color: "#374151", border: "none", borderRadius: 10, fontSize: 15, fontWeight: 600, cursor: "pointer" },
+  popApply: { flex: 2, padding: "11px 0", background: "#3b82f6", color: "white", border: "none", borderRadius: 10, fontSize: 15, fontWeight: 600, cursor: "pointer" },
   appliedRow: { display: "flex", flexWrap: "wrap", alignItems: "center", gap: 6, marginTop: 2 },
   appliedChip: { display: "inline-flex", alignItems: "center", gap: 4, background: "#eff6ff", color: "#1d4ed8", fontSize: 12, fontWeight: 500, padding: "3px 9px", borderRadius: 6 },
   chipX: { cursor: "pointer", color: "#93c5fd", fontWeight: 700 },
