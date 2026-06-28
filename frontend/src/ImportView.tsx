@@ -16,6 +16,7 @@ export default function ImportView() {
   const [fileName, setFileName] = useState("");
   const [msg, setMsg] = useState("");
   const [loading, setLoading] = useState(false);
+  const [source, setSource] = useState("simple");
 
   async function onFile(e: React.ChangeEvent<HTMLInputElement>) {
     const f = e.target.files?.[0];
@@ -25,6 +26,7 @@ export default function ImportView() {
     setLoading(true);
     const fd = new FormData();
     fd.append("file", f);
+    fd.append("source", source);
     const res = await fetch(`${API}/import/preview`, { method: "POST", body: fd });
     setCandidates(await res.json());
     setLoading(false);
@@ -48,13 +50,24 @@ export default function ImportView() {
       <h1 style={S.h1}>가져오기</h1>
 
       <div style={S.card}>
-        <div style={S.cardTitle}>CSV 파일 업로드</div>
-        <div style={S.guide}>
-          형식: <code style={S.code}>date, amount, merchant, memo</code> · 금액이 음수면 지출, 양수면 수입
+        <div style={S.cardTitle}>파일 업로드</div>
+
+        {/* 양식 선택 */}
+        <div style={S.segRow}>
+          {[{ k: "simple", label: "단순 CSV" }, { k: "kb", label: "KB국민은행" }].map((s) => (
+            <button key={s.k} onClick={() => setSource(s.k)} style={S.seg(source === s.k)}>{s.label}</button>
+          ))}
         </div>
+
+        <div style={S.guide}>
+          {source === "kb"
+            ? <>KB국민은행 거래내역 <code style={S.code}>.xls</code> 파일을 그대로 올리세요. (출금=지출, 입금=수입)</>
+            : <>형식: <code style={S.code}>date, amount, merchant, memo</code> · 금액 음수=지출, 양수=수입</>}
+        </div>
+
         <label style={S.fileBtn}>
           파일 선택
-          <input type="file" accept=".csv" onChange={onFile} style={{ display: "none" }} />
+          <input type="file" accept=".csv,.xls,.xlsx" onChange={onFile} style={{ display: "none" }} />
         </label>
         {fileName && <span style={S.fileName}>{fileName}</span>}
         {loading && <span style={S.fileName}>파싱 중…</span>}
@@ -103,7 +116,9 @@ const S: Record<string, any> = {
   h1: { fontSize: 22, fontWeight: 700, marginBottom: 18, letterSpacing: "-0.4px" },
   card: { background: "white", borderRadius: 12, padding: 20, boxShadow: "0 1px 3px rgba(0,0,0,.05)", marginBottom: 12 },
   cardTitle: { fontSize: 14, fontWeight: 700 },
-  guide: { fontSize: 13, color: "#6b7280", margin: "10px 0 16px" },
+  segRow: { display: "flex", gap: 6, marginTop: 12 },
+  seg: (active: boolean) => ({ padding: "7px 14px", borderRadius: 9, border: `1px solid ${active ? "#3b82f6" : "#d1d5db"}`, background: active ? "#eff6ff" : "white", color: active ? "#1d4ed8" : "#374151", fontSize: 13, fontWeight: 600, fontFamily: "inherit", cursor: "pointer" }),
+  guide: { fontSize: 13, color: "#6b7280", margin: "12px 0 16px" },
   code: { background: "#f1f5f9", padding: "2px 6px", borderRadius: 5, fontSize: 12.5, color: "#374151" },
   fileBtn: { display: "inline-block", padding: "9px 16px", background: "#3b82f6", color: "white", borderRadius: 10, fontSize: 14, fontWeight: 600, cursor: "pointer" },
   fileName: { fontSize: 13, color: "#6b7280", marginLeft: 12 },
