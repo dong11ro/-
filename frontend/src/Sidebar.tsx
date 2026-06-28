@@ -3,8 +3,9 @@ import type { View } from "./types";
 const ITEMS: { key: View; label: string }[] = [
   { key: "dashboard", label: "대시보드" },
   { key: "transactions", label: "거래 내역" },
+  { key: "import", label: "가져오기" },
 ];
-const SOON = ["예산", "가져오기", "분석", "설정"]; // 아직 미구현 (디자인 자리만)
+const SOON = ["예산", "분석", "설정"]; // 아직 미구현 (디자인 자리만)
 
 export default function Sidebar({ view, onChange }: { view: View; onChange: (v: View) => void }) {
   return (

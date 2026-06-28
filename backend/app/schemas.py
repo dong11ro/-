@@ -82,6 +82,20 @@ class SavedFilterRead(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class ImportCandidate(BaseModel):
+    """CSV에서 파싱된 거래 후보 (미리보기·커밋 공용)"""
+    date: date_type
+    type: Literal["income", "expense"]
+    amount: Decimal
+    merchant: Optional[str] = None
+    memo: Optional[str] = None
+
+
+class ImportCommit(BaseModel):
+    """확인 후 일괄 저장 요청"""
+    items: list[ImportCandidate]
+
+
 class TransactionRead(BaseModel):
     """거래 응답 (서버 → 클라이언트)"""
     id: int
