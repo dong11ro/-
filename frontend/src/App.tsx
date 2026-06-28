@@ -58,6 +58,7 @@ export default function App() {
   const [methods, setMethods] = useState<PaymentMethod[]>([]);
   const [allTags, setAllTags] = useState<Tag[]>([]);
   const [savedFilters, setSavedFilters] = useState<SavedFilter[]>([]);
+  const [activeSaved, setActiveSaved] = useState<SavedFilter | null>(null);
   const [txs, setTxs] = useState<Transaction[]>([]);
   const [modal, setModal] = useState<ModalState>(null);
   const [tagModal, setTagModal] = useState(false);
@@ -96,12 +97,18 @@ export default function App() {
     loadTxs();
   }, [filterCategoryIds, filterPaymentIds, filterTags, filterPeriod]);
 
-  // 필터 토글 헬퍼
-  const toggleNum = (arr: number[], set: (v: number[]) => void, id: number) =>
+  // 필터 토글 헬퍼 (수동 변경 시 적용된 즐겨찾기는 해제 → 개별 칩으로 전환)
+  const toggleNum = (arr: number[], set: (v: number[]) => void, id: number) => {
+    setActiveSaved(null);
     set(arr.includes(id) ? arr.filter((x) => x !== id) : [...arr, id]);
-  const toggleTag = (name: string) =>
+  };
+  const toggleTag = (name: string) => {
+    setActiveSaved(null);
     setFilterTags(filterTags.includes(name) ? filterTags.filter((x) => x !== name) : [...filterTags, name]);
+  };
+  const setPeriod = (p: string) => { setActiveSaved(null); setFilterPeriod(p); };
   const resetFilters = () => {
+    setActiveSaved(null);
     setFilterCategoryIds([]); setFilterPaymentIds([]); setFilterTags([]); setFilterPeriod("전체");
   };
   const togglePanel = (name: typeof openPanel) => setOpenPanel(openPanel === name ? null : name);
@@ -134,12 +141,14 @@ export default function App() {
     setFilterPaymentIds(sf.payload.payment_method_ids);
     setFilterTags(sf.payload.tags);
     setFilterPeriod(sf.payload.period);
+    setActiveSaved(sf);
     setOpenPanel(null);
     setSavedModal(false);
   }
 
   async function deleteSavedFilter(id: number) {
     await fetch(`${API}/saved-filters/${id}`, { method: "DELETE" });
+    if (activeSaved?.id === id) setActiveSaved(null);
     loadSavedFilters();
   }
 
@@ -256,7 +265,7 @@ export default function App() {
           {openPanel === "period" && (
             <div style={S.panel}>
               {["전체", "이번 달", "지난 달", "최근 3개월"].map((p) => (
-                <button key={p} onClick={() => { setFilterPeriod(p); setOpenPanel(null); }} style={S.opt(filterPeriod === p)}>{p}</button>
+                <button key={p} onClick={() => { setPeriod(p); setOpenPanel(null); }} style={S.opt(filterPeriod === p)}>{p}</button>
               ))}
             </div>
           )}
@@ -295,15 +304,19 @@ export default function App() {
             </div>
           )}
 
-          {/* 적용된 필터 칩 + 초기화 */}
-          {appliedChips.length > 0 && (
+          {/* 적용 표시: 즐겨찾기면 이름 칩 하나, 직접 필터면 개별 칩 */}
+          {activeSaved ? (
+            <div style={S.appliedRow}>
+              <span style={S.savedActiveChip}>★ {activeSaved.name}<span onClick={resetFilters} style={S.savedActiveX}>×</span></span>
+            </div>
+          ) : appliedChips.length > 0 ? (
             <div style={S.appliedRow}>
               {appliedChips.map((c) => (
                 <span key={c.key} style={S.appliedChip}>{c.label}<span onClick={c.remove} style={S.chipX}>×</span></span>
               ))}
               <button onClick={resetFilters} style={S.resetBtn}>초기화</button>
             </div>
-          )}
+          ) : null}
         </div>
 
         {txs.length === 0 && <div style={S.empty}>조건에 맞는 거래가 없어요.</div>}
@@ -422,6 +435,8 @@ const S: Record<string, any> = {
   appliedRow: { display: "flex", flexWrap: "wrap", alignItems: "center", gap: 6, marginTop: 2 },
   appliedChip: { display: "inline-flex", alignItems: "center", gap: 4, background: "#eff6ff", color: "#1d4ed8", fontSize: 12, fontWeight: 500, padding: "3px 9px", borderRadius: 6 },
   chipX: { cursor: "pointer", color: "#93c5fd", fontWeight: 700 },
+  savedActiveChip: { display: "inline-flex", alignItems: "center", gap: 6, background: "#fffbeb", color: "#b45309", border: "1px solid #fde68a", fontSize: 13, fontWeight: 700, padding: "5px 12px", borderRadius: 8 },
+  savedActiveX: { cursor: "pointer", color: "#d97706", fontWeight: 700 },
   resetBtn: { padding: "3px 10px", background: "none", border: "none", color: "#6b7280", fontSize: 12, fontWeight: 600, cursor: "pointer", textDecoration: "underline" },
   empty: { color: "#9ca3af", fontSize: 14, textAlign: "center", padding: "24px 0" },
   summary: { display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 12px", background: "#f8fafc", borderRadius: 9, marginBottom: 6 },
