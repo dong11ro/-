@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import Modal from "./Modal";
 import TransactionForm from "./TransactionForm";
 import TagManager from "./TagManager";
+import SavedFilters from "./SavedFilters";
 import type { Category, PaymentMethod, SavedFilter, Tag, Transaction } from "./types";
 
 const API = "http://localhost:8000";
@@ -60,6 +61,7 @@ export default function App() {
   const [txs, setTxs] = useState<Transaction[]>([]);
   const [modal, setModal] = useState<ModalState>(null);
   const [tagModal, setTagModal] = useState(false);
+  const [savedModal, setSavedModal] = useState(false);
 
   // 필터 상태 (다중선택)
   const [filterCategoryIds, setFilterCategoryIds] = useState<number[]>([]);
@@ -133,6 +135,7 @@ export default function App() {
     setFilterTags(sf.payload.tags);
     setFilterPeriod(sf.payload.period);
     setOpenPanel(null);
+    setSavedModal(false);
   }
 
   async function deleteSavedFilter(id: number) {
@@ -228,21 +231,10 @@ export default function App() {
         <div style={S.listHeaderCol}>
           <div style={S.listTitleRow}>
             <span style={S.formTitle}>거래 내역 ({txs.length})</span>
-            <button onClick={saveCurrentFilter} disabled={!hasActiveFilter}
-              style={{ ...S.saveFavBtn, opacity: hasActiveFilter ? 1 : 0.4 }}>☆ 필터 즐겨찾기 저장</button>
+            <button onClick={() => setSavedModal(true)} style={S.saveFavBtn}>
+              ★ 즐겨찾기{savedFilters.length ? ` (${savedFilters.length})` : ""}
+            </button>
           </div>
-
-          {/* 저장된 즐겨찾기 칩 */}
-          {savedFilters.length > 0 && (
-            <div style={S.savedRow}>
-              {savedFilters.map((sf) => (
-                <span key={sf.id} style={S.savedChip}>
-                  <span onClick={() => applySavedFilter(sf)} style={{ cursor: "pointer" }}>★ {sf.name}</span>
-                  <span onClick={() => deleteSavedFilter(sf.id)} style={S.chipX}>×</span>
-                </span>
-              ))}
-            </div>
-          )}
 
           {/* 필터 칩 버튼들 */}
           <div style={S.filterBar}>
@@ -391,6 +383,20 @@ export default function App() {
           <TagManager tags={allTags} onDelete={deleteTag} onClose={() => setTagModal(false)} />
         </Modal>
       )}
+
+      {/* ── 필터 즐겨찾기 모달 ── */}
+      {savedModal && (
+        <Modal onClose={() => setSavedModal(false)}>
+          <SavedFilters
+            savedFilters={savedFilters}
+            canSave={hasActiveFilter}
+            onSave={saveCurrentFilter}
+            onApply={applySavedFilter}
+            onDelete={deleteSavedFilter}
+            onClose={() => setSavedModal(false)}
+          />
+        </Modal>
+      )}
     </div>
   );
 }
@@ -405,9 +411,7 @@ const S: Record<string, any> = {
   formTitle: { fontSize: 15, fontWeight: 700 },
   listHeaderCol: { display: "flex", flexDirection: "column", gap: 10, marginBottom: 14 },
   listTitleRow: { display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, flexWrap: "wrap" },
-  saveFavBtn: { padding: "6px 12px", background: "#f0fdf4", color: "#15803d", border: "1px solid #bbf7d0", borderRadius: 8, fontSize: 12.5, fontWeight: 600, fontFamily: "inherit", cursor: "pointer" },
-  savedRow: { display: "flex", flexWrap: "wrap", gap: 6 },
-  savedChip: { display: "inline-flex", alignItems: "center", gap: 6, background: "#fffbeb", color: "#b45309", border: "1px solid #fde68a", fontSize: 12.5, fontWeight: 600, padding: "4px 10px", borderRadius: 7 },
+  saveFavBtn: { padding: "6px 12px", background: "#fffbeb", color: "#b45309", border: "1px solid #fde68a", borderRadius: 8, fontSize: 12.5, fontWeight: 600, fontFamily: "inherit", cursor: "pointer" },
   filterBar: { display: "flex", flexWrap: "wrap", gap: 8 },
   chip: (active: boolean) => ({ padding: "7px 12px", borderRadius: 20, border: `1px solid ${active ? "#3b82f6" : "#d1d5db"}`, background: active ? "#eff6ff" : "white", color: active ? "#1d4ed8" : "#374151", fontSize: 13, fontWeight: 600, fontFamily: "inherit", cursor: "pointer" }),
   panel: { display: "flex", flexWrap: "wrap", gap: 8, padding: 12, background: "#f8fafc", borderRadius: 10, border: "1px solid #e5e7eb" },
