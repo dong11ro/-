@@ -60,18 +60,19 @@ export default function App() {
   const [modal, setModal] = useState<ModalState>(null);
   const [tagModal, setTagModal] = useState(false);
 
-  // 필터 상태
-  const [filterCategoryId, setFilterCategoryId] = useState("");
-  const [filterPaymentId, setFilterPaymentId] = useState("");
-  const [filterTag, setFilterTag] = useState("");
+  // 필터 상태 (다중선택)
+  const [filterCategoryIds, setFilterCategoryIds] = useState<number[]>([]);
+  const [filterPaymentIds, setFilterPaymentIds] = useState<number[]>([]);
+  const [filterTags, setFilterTags] = useState<string[]>([]);
   const [filterPeriod, setFilterPeriod] = useState("전체");
+  const [openPanel, setOpenPanel] = useState<null | "period" | "category" | "payment" | "tag">(null);
 
   // ── 데이터 로드 ──
   const loadTxs = () => {
     const p = new URLSearchParams();
-    if (filterCategoryId) p.set("category_id", filterCategoryId);
-    if (filterPaymentId) p.set("payment_method_id", filterPaymentId);
-    if (filterTag) p.append("tags", filterTag);
+    filterCategoryIds.forEach((id) => p.append("category_ids", String(id)));
+    filterPaymentIds.forEach((id) => p.append("payment_method_ids", String(id)));
+    filterTags.forEach((t) => p.append("tags", t));
     const { from, to } = periodRange(filterPeriod);
     if (from) p.set("date_from", from);
     if (to) p.set("date_to", to);
@@ -88,7 +89,17 @@ export default function App() {
 
   useEffect(() => {
     loadTxs();
-  }, [filterCategoryId, filterPaymentId, filterTag, filterPeriod]);
+  }, [filterCategoryIds, filterPaymentIds, filterTags, filterPeriod]);
+
+  // 필터 토글 헬퍼
+  const toggleNum = (arr: number[], set: (v: number[]) => void, id: number) =>
+    set(arr.includes(id) ? arr.filter((x) => x !== id) : [...arr, id]);
+  const toggleTag = (name: string) =>
+    setFilterTags(filterTags.includes(name) ? filterTags.filter((x) => x !== name) : [...filterTags, name]);
+  const resetFilters = () => {
+    setFilterCategoryIds([]); setFilterPaymentIds([]); setFilterTags([]); setFilterPeriod("전체");
+  };
+  const togglePanel = (name: typeof openPanel) => setOpenPanel(openPanel === name ? null : name);
 
   // 이름 빠른 조회용 맵
   const catName = useMemo(() => new Map(categories.map((c) => [c.id, c.name] as [number, string])), [categories]);
@@ -121,6 +132,14 @@ export default function App() {
     return Array.from(map, ([date, items]) => ({ date, items }));
   }, [txs]);
 
+  // 적용된 필터 칩 (개별 제거 가능)
+  const appliedChips: { key: string; label: string; remove: () => void }[] = [
+    ...(filterPeriod !== "전체" ? [{ key: "period", label: filterPeriod, remove: () => setFilterPeriod("전체") }] : []),
+    ...filterCategoryIds.map((id) => ({ key: "c" + id, label: catName.get(id) ?? "?", remove: () => setFilterCategoryIds(filterCategoryIds.filter((x) => x !== id)) })),
+    ...filterPaymentIds.map((id) => ({ key: "p" + id, label: methodName.get(id) ?? "?", remove: () => setFilterPaymentIds(filterPaymentIds.filter((x) => x !== id)) })),
+    ...filterTags.map((t) => ({ key: "t" + t, label: "#" + t, remove: () => setFilterTags(filterTags.filter((x) => x !== t)) })),
+  ];
+
   // ── 추가/수정 저장 (모달 폼에서 호출) ──
   async function handleSubmit(payload: any) {
     if (modal?.mode === "edit") {
@@ -150,7 +169,7 @@ export default function App() {
   async function deleteTag(tag: Tag) {
     if (!confirm(`'#${tag.name}' 태그를 완전히 삭제할까요? 모든 거래에서 제거됩니다.`)) return;
     await fetch(`${API}/tags/${tag.id}`, { method: "DELETE" });
-    if (filterTag === tag.name) setFilterTag(""); // 그 태그로 필터 중이었으면 해제
+    setFilterTags(filterTags.filter((x) => x !== tag.name)); // 그 태그로 필터 중이었으면 해제
     loadTags();
     loadTxs();
   }
@@ -169,31 +188,75 @@ export default function App() {
       <div style={S.card}>
         <div style={S.listHeaderCol}>
           <span style={S.formTitle}>거래 내역 ({txs.length})</span>
+
+          {/* 필터 칩 버튼들 */}
           <div style={S.filterBar}>
-            <select value={filterPeriod} onChange={(e) => setFilterPeriod(e.target.value)} style={S.filterSelect}>
-              {["전체", "이번 달", "지난 달", "최근 3개월"].map((p) => <option key={p} value={p}>{p}</option>)}
-            </select>
-            <select value={filterCategoryId} onChange={(e) => setFilterCategoryId(e.target.value)} style={S.filterSelect}>
-              <option value="">전체 카테고리</option>
-              {filterGroups.map((g) =>
-                g.children.length > 0 ? (
-                  <optgroup key={g.parent.id} label={g.parent.name}>
-                    {g.children.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-                  </optgroup>
-                ) : (
-                  <option key={g.parent.id} value={g.parent.id}>{g.parent.name}</option>
-                )
-              )}
-            </select>
-            <select value={filterPaymentId} onChange={(e) => setFilterPaymentId(e.target.value)} style={S.filterSelect}>
-              <option value="">전체 결제수단</option>
-              {methods.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
-            </select>
-            <select value={filterTag} onChange={(e) => setFilterTag(e.target.value)} style={S.filterSelect}>
-              <option value="">전체 태그</option>
-              {allTags.map((t) => <option key={t.id} value={t.name}>#{t.name}</option>)}
-            </select>
+            <button onClick={() => togglePanel("period")} style={S.chip(filterPeriod !== "전체")}>
+              {filterPeriod !== "전체" ? filterPeriod : "기간"} ▾
+            </button>
+            <button onClick={() => togglePanel("category")} style={S.chip(filterCategoryIds.length > 0)}>
+              카테고리{filterCategoryIds.length ? ` ${filterCategoryIds.length}` : ""} ▾
+            </button>
+            <button onClick={() => togglePanel("payment")} style={S.chip(filterPaymentIds.length > 0)}>
+              결제수단{filterPaymentIds.length ? ` ${filterPaymentIds.length}` : ""} ▾
+            </button>
+            <button onClick={() => togglePanel("tag")} style={S.chip(filterTags.length > 0)}>
+              태그{filterTags.length ? ` ${filterTags.length}` : ""} ▾
+            </button>
           </div>
+
+          {/* 펼쳐진 패널 */}
+          {openPanel === "period" && (
+            <div style={S.panel}>
+              {["전체", "이번 달", "지난 달", "최근 3개월"].map((p) => (
+                <button key={p} onClick={() => { setFilterPeriod(p); setOpenPanel(null); }} style={S.opt(filterPeriod === p)}>{p}</button>
+              ))}
+            </div>
+          )}
+          {openPanel === "category" && (
+            <div style={S.panel}>
+              {filterGroups.map((g) => (
+                <div key={g.parent.id} style={{ width: "100%" }}>
+                  <div style={S.panelGroup}>{g.parent.name}</div>
+                  <div style={S.optWrap}>
+                    {(g.children.length ? g.children : [g.parent]).map((c) => (
+                      <button key={c.id} onClick={() => toggleNum(filterCategoryIds, setFilterCategoryIds, c.id)} style={S.opt(filterCategoryIds.includes(c.id))}>{c.name}</button>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+          {openPanel === "payment" && (
+            <div style={S.panel}>
+              <div style={S.optWrap}>
+                {methods.map((m) => (
+                  <button key={m.id} onClick={() => toggleNum(filterPaymentIds, setFilterPaymentIds, m.id)} style={S.opt(filterPaymentIds.includes(m.id))}>{m.name}</button>
+                ))}
+              </div>
+            </div>
+          )}
+          {openPanel === "tag" && (
+            <div style={S.panel}>
+              {allTags.length === 0 ? <div style={S.panelEmpty}>태그가 없어요.</div> : (
+                <div style={S.optWrap}>
+                  {allTags.map((t) => (
+                    <button key={t.id} onClick={() => toggleTag(t.name)} style={S.opt(filterTags.includes(t.name))}>#{t.name}</button>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* 적용된 필터 칩 + 초기화 */}
+          {appliedChips.length > 0 && (
+            <div style={S.appliedRow}>
+              {appliedChips.map((c) => (
+                <span key={c.key} style={S.appliedChip}>{c.label}<span onClick={c.remove} style={S.chipX}>×</span></span>
+              ))}
+              <button onClick={resetFilters} style={S.resetBtn}>초기화</button>
+            </div>
+          )}
         </div>
 
         {txs.length === 0 && <div style={S.empty}>조건에 맞는 거래가 없어요.</div>}
@@ -287,7 +350,16 @@ const S: Record<string, any> = {
   formTitle: { fontSize: 15, fontWeight: 700 },
   listHeaderCol: { display: "flex", flexDirection: "column", gap: 10, marginBottom: 14 },
   filterBar: { display: "flex", flexWrap: "wrap", gap: 8 },
-  filterSelect: { padding: "7px 10px", borderRadius: 8, border: "1px solid #d1d5db", fontSize: 13, fontFamily: "inherit", background: "white", cursor: "pointer", color: "#374151" },
+  chip: (active: boolean) => ({ padding: "7px 12px", borderRadius: 20, border: `1px solid ${active ? "#3b82f6" : "#d1d5db"}`, background: active ? "#eff6ff" : "white", color: active ? "#1d4ed8" : "#374151", fontSize: 13, fontWeight: 600, fontFamily: "inherit", cursor: "pointer" }),
+  panel: { display: "flex", flexWrap: "wrap", gap: 8, padding: 12, background: "#f8fafc", borderRadius: 10, border: "1px solid #e5e7eb" },
+  panelGroup: { width: "100%", fontSize: 11, fontWeight: 700, color: "#9ca3af", marginBottom: 6, marginTop: 2 },
+  optWrap: { display: "flex", flexWrap: "wrap", gap: 6, width: "100%" },
+  opt: (active: boolean) => ({ padding: "5px 11px", borderRadius: 7, border: `1px solid ${active ? "#3b82f6" : "#e5e7eb"}`, background: active ? "#3b82f6" : "white", color: active ? "white" : "#374151", fontSize: 12.5, fontWeight: 500, fontFamily: "inherit", cursor: "pointer" }),
+  panelEmpty: { fontSize: 13, color: "#9ca3af", padding: "8px 4px" },
+  appliedRow: { display: "flex", flexWrap: "wrap", alignItems: "center", gap: 6, marginTop: 2 },
+  appliedChip: { display: "inline-flex", alignItems: "center", gap: 4, background: "#eff6ff", color: "#1d4ed8", fontSize: 12, fontWeight: 500, padding: "3px 9px", borderRadius: 6 },
+  chipX: { cursor: "pointer", color: "#93c5fd", fontWeight: 700 },
+  resetBtn: { padding: "3px 10px", background: "none", border: "none", color: "#6b7280", fontSize: 12, fontWeight: 600, cursor: "pointer", textDecoration: "underline" },
   empty: { color: "#9ca3af", fontSize: 14, textAlign: "center", padding: "24px 0" },
   summary: { display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 12px", background: "#f8fafc", borderRadius: 9, marginBottom: 6 },
   summaryCount: { fontSize: 12.5, fontWeight: 600, color: "#6b7280" },

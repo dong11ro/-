@@ -100,19 +100,19 @@ def create_transaction(payload: schemas.TransactionCreate, db: Session = Depends
 
 @app.get("/transactions", response_model=list[schemas.TransactionRead])
 def list_transactions(
-    category_id: int | None = None,
-    payment_method_id: int | None = None,
+    category_ids: list[int] = Query(default=[]),
+    payment_method_ids: list[int] = Query(default=[]),
     tags: list[str] = Query(default=[]),
     date_from: date_type | None = None,
     date_to: date_type | None = None,
     db: Session = Depends(get_db),
 ):
-    """거래 목록 (최신순). 주어진 필터를 모두 AND로 적용. 없는 필터는 무시."""
+    """거래 목록 (최신순). 주어진 필터를 모두 AND로 적용. 각 필터 내 여러 값은 OR(IN)."""
     q = db.query(models.Transaction)
-    if category_id is not None:
-        q = q.filter(models.Transaction.category_id == category_id)
-    if payment_method_id is not None:
-        q = q.filter(models.Transaction.payment_method_id == payment_method_id)
+    if category_ids:
+        q = q.filter(models.Transaction.category_id.in_(category_ids))
+    if payment_method_ids:
+        q = q.filter(models.Transaction.payment_method_id.in_(payment_method_ids))
     if tags:
         # 선택한 태그 중 하나라도 달린 거래 (EXISTS 서브쿼리 → 중복행 없음)
         q = q.filter(models.Transaction.tags.any(models.Tag.name.in_(tags)))
