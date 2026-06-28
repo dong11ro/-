@@ -9,6 +9,14 @@ const API = "http://localhost:8000";
 
 const won = (n: string | number) => "₩" + Math.abs(Number(n)).toLocaleString("ko-KR");
 
+// 태그 색: 이름을 해시해 팔레트에서 고정 색 선택 (스키마에 색 없으므로 프론트에서 파생)
+const TAG_COLORS = ["#3b82f6", "#ec4899", "#f59e0b", "#14b8a6", "#8b5cf6", "#ef4444", "#0ea5e9", "#84cc16"];
+function tagColor(name: string): string {
+  let h = 0;
+  for (const ch of name) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
+  return TAG_COLORS[h % TAG_COLORS.length];
+}
+
 // 날짜 그룹 헤더 라벨: "6월 27일 (금)"
 function dateLabel(d: string): string {
   const dt = new Date(d + "T00:00:00");
@@ -335,7 +343,9 @@ export default function App() {
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={S.rowTop}>
                       <span style={S.rowName}>{name}</span>
-                      {t.tags.map((tag) => <span key={tag} style={S.rowTag}>#{tag}</span>)}
+                      {t.tags.map((tag) => (
+                        <span key={tag} style={{ ...S.rowTag, background: tagColor(tag) + "22", color: tagColor(tag) }}>#{tag}</span>
+                      ))}
                       <span style={{ ...S.srcBadge, background: badge.bg, color: badge.color }}>{badge.label}</span>
                     </div>
                     <div style={S.rowSub}>
@@ -445,7 +455,7 @@ export default function App() {
               : allTags.map((t) => (
                 <label key={t.id} style={S.checkRow}>
                   <input type="checkbox" checked={draftTags.includes(t.name)} onChange={() => toggleDraftTag(t.name)} />
-                  <span>#{t.name}</span>
+                  <span style={{ ...S.tagPill, background: tagColor(t.name) + "22", color: tagColor(t.name) }}>#{t.name}</span>
                 </label>
               )))}
           </div>
@@ -483,6 +493,7 @@ const S: Record<string, any> = {
   dot: { width: 9, height: 9, borderRadius: "50%", flexShrink: 0 },
   checkRow: { display: "flex", alignItems: "center", gap: 9, padding: "8px 4px", fontSize: 14, color: "#374151", cursor: "pointer" },
   checkRowIndent: { display: "flex", alignItems: "center", gap: 9, padding: "6px 4px 6px 18px", fontSize: 14, color: "#374151", cursor: "pointer" },
+  tagPill: { fontSize: 13, fontWeight: 600, padding: "3px 10px", borderRadius: 6 },
   popEmpty: { fontSize: 14, color: "#9ca3af", textAlign: "center", padding: "20px 0" },
   popFooter: { display: "flex", gap: 8 },
   popReset: { flex: 1, padding: "11px 0", background: "#f1f5f9", color: "#374151", border: "none", borderRadius: 10, fontSize: 15, fontWeight: 600, cursor: "pointer" },
