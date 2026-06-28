@@ -2,6 +2,8 @@
 export type Category = { id: number; name: string; type: string; parent_id: number | null; color: string | null };
 export type PaymentMethod = { id: number; name: string };
 export type Tag = { id: number; name: string };
+export type FilterPayload = { category_ids: number[]; payment_method_ids: number[]; tags: string[]; period: string };
+export type SavedFilter = { id: number; name: string; payload: FilterPayload };
 export type Transaction = {
   id: number;
   date: string;

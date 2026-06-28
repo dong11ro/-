@@ -72,6 +72,32 @@ def delete_tag(tag_id: int, db: Session = Depends(get_db)):
     db.commit()
 
 
+@app.get("/saved-filters", response_model=list[schemas.SavedFilterRead])
+def list_saved_filters(db: Session = Depends(get_db)):
+    """필터 즐겨찾기 목록"""
+    return db.query(models.SavedFilter).order_by(models.SavedFilter.id).all()
+
+
+@app.post("/saved-filters", response_model=schemas.SavedFilterRead, status_code=201)
+def create_saved_filter(payload: schemas.SavedFilterCreate, db: Session = Depends(get_db)):
+    """현재 필터 조합을 즐겨찾기로 저장"""
+    sf = models.SavedFilter(name=payload.name, payload=payload.payload.model_dump())
+    db.add(sf)
+    db.commit()
+    db.refresh(sf)
+    return sf
+
+
+@app.delete("/saved-filters/{sf_id}", status_code=204)
+def delete_saved_filter(sf_id: int, db: Session = Depends(get_db)):
+    """즐겨찾기 삭제"""
+    sf = db.get(models.SavedFilter, sf_id)
+    if sf is None:
+        raise HTTPException(status_code=404, detail="즐겨찾기를 찾을 수 없음")
+    db.delete(sf)
+    db.commit()
+
+
 def _attach_tags(tx: models.Transaction, tag_names: list[str], db: Session) -> None:
     """태그 이름 목록을 거래에 연결한다. 없는 태그는 새로 만든다(get-or-create)."""
     for raw in tag_names:

@@ -59,6 +59,29 @@ class TagRead(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class FilterPayload(BaseModel):
+    """필터 조합 (즐겨찾기로 저장되는 내용)"""
+    category_ids: list[int] = []
+    payment_method_ids: list[int] = []
+    tags: list[str] = []
+    period: str = "전체"
+
+
+class SavedFilterCreate(BaseModel):
+    """즐겨찾기 저장 요청"""
+    name: str
+    payload: FilterPayload
+
+
+class SavedFilterRead(BaseModel):
+    """즐겨찾기 응답"""
+    id: int
+    name: str
+    payload: FilterPayload
+
+    model_config = {"from_attributes": True}
+
+
 class TransactionRead(BaseModel):
     """거래 응답 (서버 → 클라이언트)"""
     id: int

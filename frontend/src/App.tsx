@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import Modal from "./Modal";
 import TransactionForm from "./TransactionForm";
 import TagManager from "./TagManager";
-import type { Category, PaymentMethod, Tag, Transaction } from "./types";
+import type { Category, PaymentMethod, SavedFilter, Tag, Transaction } from "./types";
 
 const API = "http://localhost:8000";
 
@@ -56,6 +56,7 @@ export default function App() {
   const [categories, setCategories] = useState<Category[]>([]);
   const [methods, setMethods] = useState<PaymentMethod[]>([]);
   const [allTags, setAllTags] = useState<Tag[]>([]);
+  const [savedFilters, setSavedFilters] = useState<SavedFilter[]>([]);
   const [txs, setTxs] = useState<Transaction[]>([]);
   const [modal, setModal] = useState<ModalState>(null);
   const [tagModal, setTagModal] = useState(false);
@@ -80,11 +81,13 @@ export default function App() {
     return fetch(`${API}/transactions${qs ? `?${qs}` : ""}`).then((r) => r.json()).then(setTxs);
   };
   const loadTags = () => fetch(`${API}/tags`).then((r) => r.json()).then(setAllTags);
+  const loadSavedFilters = () => fetch(`${API}/saved-filters`).then((r) => r.json()).then(setSavedFilters);
 
   useEffect(() => {
     fetch(`${API}/categories`).then((r) => r.json()).then(setCategories);
     fetch(`${API}/payment-methods`).then((r) => r.json()).then(setMethods);
     loadTags();
+    loadSavedFilters();
   }, []);
 
   useEffect(() => {
@@ -100,6 +103,42 @@ export default function App() {
     setFilterCategoryIds([]); setFilterPaymentIds([]); setFilterTags([]); setFilterPeriod("전체");
   };
   const togglePanel = (name: typeof openPanel) => setOpenPanel(openPanel === name ? null : name);
+
+  // ── 필터 즐겨찾기 ──
+  const hasActiveFilter =
+    filterCategoryIds.length > 0 || filterPaymentIds.length > 0 || filterTags.length > 0 || filterPeriod !== "전체";
+
+  async function saveCurrentFilter() {
+    const name = prompt("즐겨찾기 이름을 입력하세요");
+    if (!name?.trim()) return;
+    await fetch(`${API}/saved-filters`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        name: name.trim(),
+        payload: {
+          category_ids: filterCategoryIds,
+          payment_method_ids: filterPaymentIds,
+          tags: filterTags,
+          period: filterPeriod,
+        },
+      }),
+    });
+    loadSavedFilters();
+  }
+
+  function applySavedFilter(sf: SavedFilter) {
+    setFilterCategoryIds(sf.payload.category_ids);
+    setFilterPaymentIds(sf.payload.payment_method_ids);
+    setFilterTags(sf.payload.tags);
+    setFilterPeriod(sf.payload.period);
+    setOpenPanel(null);
+  }
+
+  async function deleteSavedFilter(id: number) {
+    await fetch(`${API}/saved-filters/${id}`, { method: "DELETE" });
+    loadSavedFilters();
+  }
 
   // 이름 빠른 조회용 맵
   const catName = useMemo(() => new Map(categories.map((c) => [c.id, c.name] as [number, string])), [categories]);
@@ -187,7 +226,23 @@ export default function App() {
       {/* ── 거래 목록 ── */}
       <div style={S.card}>
         <div style={S.listHeaderCol}>
-          <span style={S.formTitle}>거래 내역 ({txs.length})</span>
+          <div style={S.listTitleRow}>
+            <span style={S.formTitle}>거래 내역 ({txs.length})</span>
+            <button onClick={saveCurrentFilter} disabled={!hasActiveFilter}
+              style={{ ...S.saveFavBtn, opacity: hasActiveFilter ? 1 : 0.4 }}>☆ 필터 즐겨찾기 저장</button>
+          </div>
+
+          {/* 저장된 즐겨찾기 칩 */}
+          {savedFilters.length > 0 && (
+            <div style={S.savedRow}>
+              {savedFilters.map((sf) => (
+                <span key={sf.id} style={S.savedChip}>
+                  <span onClick={() => applySavedFilter(sf)} style={{ cursor: "pointer" }}>★ {sf.name}</span>
+                  <span onClick={() => deleteSavedFilter(sf.id)} style={S.chipX}>×</span>
+                </span>
+              ))}
+            </div>
+          )}
 
           {/* 필터 칩 버튼들 */}
           <div style={S.filterBar}>
@@ -349,6 +404,10 @@ const S: Record<string, any> = {
   card: { background: "white", border: "1px solid #e5e7eb", borderRadius: 14, padding: 20, marginBottom: 16, boxShadow: "0 1px 3px rgba(0,0,0,.05)" },
   formTitle: { fontSize: 15, fontWeight: 700 },
   listHeaderCol: { display: "flex", flexDirection: "column", gap: 10, marginBottom: 14 },
+  listTitleRow: { display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, flexWrap: "wrap" },
+  saveFavBtn: { padding: "6px 12px", background: "#f0fdf4", color: "#15803d", border: "1px solid #bbf7d0", borderRadius: 8, fontSize: 12.5, fontWeight: 600, fontFamily: "inherit", cursor: "pointer" },
+  savedRow: { display: "flex", flexWrap: "wrap", gap: 6 },
+  savedChip: { display: "inline-flex", alignItems: "center", gap: 6, background: "#fffbeb", color: "#b45309", border: "1px solid #fde68a", fontSize: 12.5, fontWeight: 600, padding: "4px 10px", borderRadius: 7 },
   filterBar: { display: "flex", flexWrap: "wrap", gap: 8 },
   chip: (active: boolean) => ({ padding: "7px 12px", borderRadius: 20, border: `1px solid ${active ? "#3b82f6" : "#d1d5db"}`, background: active ? "#eff6ff" : "white", color: active ? "#1d4ed8" : "#374151", fontSize: 13, fontWeight: 600, fontFamily: "inherit", cursor: "pointer" }),
   panel: { display: "flex", flexWrap: "wrap", gap: 8, padding: 12, background: "#f8fafc", borderRadius: 10, border: "1px solid #e5e7eb" },
