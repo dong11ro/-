@@ -4,6 +4,7 @@ from datetime import date as date_type
 
 from fastapi import Depends, FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
+from sqlalchemy import delete
 from sqlalchemy.orm import Session
 
 from . import models, schemas
@@ -57,6 +58,18 @@ def list_payment_methods(db: Session = Depends(get_db)):
 def list_tags(db: Session = Depends(get_db)):
     """태그 목록 (자동완성용)"""
     return db.query(models.Tag).order_by(models.Tag.name).all()
+
+
+@app.delete("/tags/{tag_id}", status_code=204)
+def delete_tag(tag_id: int, db: Session = Depends(get_db)):
+    """태그 완전 삭제 (모든 거래 연결 제거 후 태그 삭제)"""
+    tag = db.get(models.Tag, tag_id)
+    if tag is None:
+        raise HTTPException(status_code=404, detail="태그를 찾을 수 없음")
+    # 다대다 연결(transaction_tags) 먼저 제거 (FK 위반 방지)
+    db.execute(delete(models.transaction_tags).where(models.transaction_tags.c.tag_id == tag_id))
+    db.delete(tag)
+    db.commit()
 
 
 def _attach_tags(tx: models.Transaction, tag_names: list[str], db: Session) -> None:

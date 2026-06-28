@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import Modal from "./Modal";
 import TransactionForm from "./TransactionForm";
+import TagManager from "./TagManager";
 import type { Category, PaymentMethod, Tag, Transaction } from "./types";
 
 const API = "http://localhost:8000";
@@ -57,6 +58,7 @@ export default function App() {
   const [allTags, setAllTags] = useState<Tag[]>([]);
   const [txs, setTxs] = useState<Transaction[]>([]);
   const [modal, setModal] = useState<ModalState>(null);
+  const [tagModal, setTagModal] = useState(false);
 
   // 필터 상태
   const [filterCategoryId, setFilterCategoryId] = useState("");
@@ -144,11 +146,23 @@ export default function App() {
     loadTxs();
   }
 
+  // 태그 완전 삭제 (모든 거래에서 제거)
+  async function deleteTag(tag: Tag) {
+    if (!confirm(`'#${tag.name}' 태그를 완전히 삭제할까요? 모든 거래에서 제거됩니다.`)) return;
+    await fetch(`${API}/tags/${tag.id}`, { method: "DELETE" });
+    if (filterTag === tag.name) setFilterTag(""); // 그 태그로 필터 중이었으면 해제
+    loadTags();
+    loadTxs();
+  }
+
   return (
     <div style={S.page}>
       <div style={S.topBar}>
         <h1 style={S.h1}>가계부</h1>
-        <button onClick={() => setModal({ mode: "add" })} style={S.addBtn}>+ 거래 추가</button>
+        <div style={{ display: "flex", gap: 8 }}>
+          <button onClick={() => setTagModal(true)} style={S.ghostBtn}>태그 관리</button>
+          <button onClick={() => setModal({ mode: "add" })} style={S.addBtn}>+ 거래 추가</button>
+        </div>
       </div>
 
       {/* ── 거래 목록 ── */}
@@ -252,6 +266,13 @@ export default function App() {
           />
         </Modal>
       )}
+
+      {/* ── 태그 관리 모달 ── */}
+      {tagModal && (
+        <Modal onClose={() => setTagModal(false)}>
+          <TagManager tags={allTags} onDelete={deleteTag} onClose={() => setTagModal(false)} />
+        </Modal>
+      )}
     </div>
   );
 }
@@ -261,6 +282,7 @@ const S: Record<string, any> = {
   topBar: { display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20 },
   h1: { fontSize: 24, fontWeight: 700, letterSpacing: "-0.4px" },
   addBtn: { padding: "9px 16px", background: "#3b82f6", color: "white", border: "none", borderRadius: 10, fontSize: 14, fontWeight: 600, cursor: "pointer" },
+  ghostBtn: { padding: "9px 14px", background: "white", color: "#374151", border: "1px solid #d1d5db", borderRadius: 10, fontSize: 14, fontWeight: 600, cursor: "pointer" },
   card: { background: "white", border: "1px solid #e5e7eb", borderRadius: 14, padding: 20, marginBottom: 16, boxShadow: "0 1px 3px rgba(0,0,0,.05)" },
   formTitle: { fontSize: 15, fontWeight: 700 },
   listHeaderCol: { display: "flex", flexDirection: "column", gap: 10, marginBottom: 14 },
