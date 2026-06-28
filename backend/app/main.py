@@ -2,7 +2,7 @@
 from contextlib import asynccontextmanager
 from datetime import date as date_type
 
-from fastapi import Depends, FastAPI, File, HTTPException, Query, UploadFile
+from fastapi import Depends, FastAPI, File, Form, HTTPException, Query, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import delete
 from sqlalchemy.orm import Session
@@ -99,10 +99,10 @@ def dashboard_comparison(month: str | None = None, db: Session = Depends(get_db)
 
 # ── CSV 가져오기 ──
 @app.post("/import/preview")
-async def import_preview(file: UploadFile = File(...)):
-    """CSV 업로드 → 거래 후보로 파싱해 미리보기 반환 (저장 안 함)"""
+async def import_preview(file: UploadFile = File(...), source: str = Form("simple")):
+    """파일 업로드 → 양식(source)에 맞게 파싱해 미리보기 반환 (저장 안 함). CSV/xls/xlsx 지원."""
     content = await file.read()
-    return importer.parse_csv(content)
+    return importer.parse(file.filename or "", content, source)
 
 
 @app.post("/import/commit", status_code=201)
