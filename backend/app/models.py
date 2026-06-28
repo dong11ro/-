@@ -105,3 +105,12 @@ class ImportPreset(Base):
     user_id = Column(Integer, nullable=False, default=1)
     source_name = Column(String, nullable=False)       # 카드사/은행명
     column_mapping = Column(JSONB)                      # 어느 열이 날짜/금액/가맹점인지
+
+
+class SavedFilter(Base):
+    """필터 즐겨찾기: 자주 보는 필터 조합을 이름 붙여 저장"""
+    __tablename__ = "saved_filters"
+    id = Column(Integer, primary_key=True)
+    user_id = Column(Integer, nullable=False, default=1)
+    name = Column(String, nullable=False)
+    payload = Column(JSONB, nullable=False)            # {category_ids, payment_method_ids, tags, period}

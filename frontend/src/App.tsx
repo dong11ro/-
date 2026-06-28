@@ -2,7 +2,8 @@ import { useEffect, useMemo, useState } from "react";
 import Modal from "./Modal";
 import TransactionForm from "./TransactionForm";
 import TagManager from "./TagManager";
-import type { Category, PaymentMethod, Tag, Transaction } from "./types";
+import SavedFilters from "./SavedFilters";
+import type { Category, PaymentMethod, SavedFilter, Tag, Transaction } from "./types";
 
 const API = "http://localhost:8000";
 
@@ -56,9 +57,12 @@ export default function App() {
   const [categories, setCategories] = useState<Category[]>([]);
   const [methods, setMethods] = useState<PaymentMethod[]>([]);
   const [allTags, setAllTags] = useState<Tag[]>([]);
+  const [savedFilters, setSavedFilters] = useState<SavedFilter[]>([]);
+  const [activeSaved, setActiveSaved] = useState<SavedFilter | null>(null);
   const [txs, setTxs] = useState<Transaction[]>([]);
   const [modal, setModal] = useState<ModalState>(null);
   const [tagModal, setTagModal] = useState(false);
+  const [savedModal, setSavedModal] = useState(false);
 
   // 필터 상태 (다중선택)
   const [filterCategoryIds, setFilterCategoryIds] = useState<number[]>([]);
@@ -80,26 +84,73 @@ export default function App() {
     return fetch(`${API}/transactions${qs ? `?${qs}` : ""}`).then((r) => r.json()).then(setTxs);
   };
   const loadTags = () => fetch(`${API}/tags`).then((r) => r.json()).then(setAllTags);
+  const loadSavedFilters = () => fetch(`${API}/saved-filters`).then((r) => r.json()).then(setSavedFilters);
 
   useEffect(() => {
     fetch(`${API}/categories`).then((r) => r.json()).then(setCategories);
     fetch(`${API}/payment-methods`).then((r) => r.json()).then(setMethods);
     loadTags();
+    loadSavedFilters();
   }, []);
 
   useEffect(() => {
     loadTxs();
   }, [filterCategoryIds, filterPaymentIds, filterTags, filterPeriod]);
 
-  // 필터 토글 헬퍼
-  const toggleNum = (arr: number[], set: (v: number[]) => void, id: number) =>
+  // 필터 토글 헬퍼 (수동 변경 시 적용된 즐겨찾기는 해제 → 개별 칩으로 전환)
+  const toggleNum = (arr: number[], set: (v: number[]) => void, id: number) => {
+    setActiveSaved(null);
     set(arr.includes(id) ? arr.filter((x) => x !== id) : [...arr, id]);
-  const toggleTag = (name: string) =>
+  };
+  const toggleTag = (name: string) => {
+    setActiveSaved(null);
     setFilterTags(filterTags.includes(name) ? filterTags.filter((x) => x !== name) : [...filterTags, name]);
+  };
+  const setPeriod = (p: string) => { setActiveSaved(null); setFilterPeriod(p); };
   const resetFilters = () => {
+    setActiveSaved(null);
     setFilterCategoryIds([]); setFilterPaymentIds([]); setFilterTags([]); setFilterPeriod("전체");
   };
   const togglePanel = (name: typeof openPanel) => setOpenPanel(openPanel === name ? null : name);
+
+  // ── 필터 즐겨찾기 ──
+  const hasActiveFilter =
+    filterCategoryIds.length > 0 || filterPaymentIds.length > 0 || filterTags.length > 0 || filterPeriod !== "전체";
+
+  async function saveCurrentFilter() {
+    const name = prompt("즐겨찾기 이름을 입력하세요");
+    if (!name?.trim()) return;
+    await fetch(`${API}/saved-filters`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        name: name.trim(),
+        payload: {
+          category_ids: filterCategoryIds,
+          payment_method_ids: filterPaymentIds,
+          tags: filterTags,
+          period: filterPeriod,
+        },
+      }),
+    });
+    loadSavedFilters();
+  }
+
+  function applySavedFilter(sf: SavedFilter) {
+    setFilterCategoryIds(sf.payload.category_ids);
+    setFilterPaymentIds(sf.payload.payment_method_ids);
+    setFilterTags(sf.payload.tags);
+    setFilterPeriod(sf.payload.period);
+    setActiveSaved(sf);
+    setOpenPanel(null);
+    setSavedModal(false);
+  }
+
+  async function deleteSavedFilter(id: number) {
+    await fetch(`${API}/saved-filters/${id}`, { method: "DELETE" });
+    if (activeSaved?.id === id) setActiveSaved(null);
+    loadSavedFilters();
+  }
 
   // 이름 빠른 조회용 맵
   const catName = useMemo(() => new Map(categories.map((c) => [c.id, c.name] as [number, string])), [categories]);
@@ -187,7 +238,12 @@ export default function App() {
       {/* ── 거래 목록 ── */}
       <div style={S.card}>
         <div style={S.listHeaderCol}>
-          <span style={S.formTitle}>거래 내역 ({txs.length})</span>
+          <div style={S.listTitleRow}>
+            <span style={S.formTitle}>거래 내역 ({txs.length})</span>
+            <button onClick={() => setSavedModal(true)} style={S.saveFavBtn}>
+              ★ 즐겨찾기{savedFilters.length ? ` (${savedFilters.length})` : ""}
+            </button>
+          </div>
 
           {/* 필터 칩 버튼들 */}
           <div style={S.filterBar}>
@@ -209,7 +265,7 @@ export default function App() {
           {openPanel === "period" && (
             <div style={S.panel}>
               {["전체", "이번 달", "지난 달", "최근 3개월"].map((p) => (
-                <button key={p} onClick={() => { setFilterPeriod(p); setOpenPanel(null); }} style={S.opt(filterPeriod === p)}>{p}</button>
+                <button key={p} onClick={() => { setPeriod(p); setOpenPanel(null); }} style={S.opt(filterPeriod === p)}>{p}</button>
               ))}
             </div>
           )}
@@ -248,15 +304,19 @@ export default function App() {
             </div>
           )}
 
-          {/* 적용된 필터 칩 + 초기화 */}
-          {appliedChips.length > 0 && (
+          {/* 적용 표시: 즐겨찾기면 이름 칩 하나, 직접 필터면 개별 칩 */}
+          {activeSaved ? (
+            <div style={S.appliedRow}>
+              <span style={S.savedActiveChip}>★ {activeSaved.name}<span onClick={resetFilters} style={S.savedActiveX}>×</span></span>
+            </div>
+          ) : appliedChips.length > 0 ? (
             <div style={S.appliedRow}>
               {appliedChips.map((c) => (
                 <span key={c.key} style={S.appliedChip}>{c.label}<span onClick={c.remove} style={S.chipX}>×</span></span>
               ))}
               <button onClick={resetFilters} style={S.resetBtn}>초기화</button>
             </div>
-          )}
+          ) : null}
         </div>
 
         {txs.length === 0 && <div style={S.empty}>조건에 맞는 거래가 없어요.</div>}
@@ -336,6 +396,20 @@ export default function App() {
           <TagManager tags={allTags} onDelete={deleteTag} onClose={() => setTagModal(false)} />
         </Modal>
       )}
+
+      {/* ── 필터 즐겨찾기 모달 ── */}
+      {savedModal && (
+        <Modal onClose={() => setSavedModal(false)}>
+          <SavedFilters
+            savedFilters={savedFilters}
+            canSave={hasActiveFilter}
+            onSave={saveCurrentFilter}
+            onApply={applySavedFilter}
+            onDelete={deleteSavedFilter}
+            onClose={() => setSavedModal(false)}
+          />
+        </Modal>
+      )}
     </div>
   );
 }
@@ -349,6 +423,8 @@ const S: Record<string, any> = {
   card: { background: "white", border: "1px solid #e5e7eb", borderRadius: 14, padding: 20, marginBottom: 16, boxShadow: "0 1px 3px rgba(0,0,0,.05)" },
   formTitle: { fontSize: 15, fontWeight: 700 },
   listHeaderCol: { display: "flex", flexDirection: "column", gap: 10, marginBottom: 14 },
+  listTitleRow: { display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, flexWrap: "wrap" },
+  saveFavBtn: { padding: "6px 12px", background: "#fffbeb", color: "#b45309", border: "1px solid #fde68a", borderRadius: 8, fontSize: 12.5, fontWeight: 600, fontFamily: "inherit", cursor: "pointer" },
   filterBar: { display: "flex", flexWrap: "wrap", gap: 8 },
   chip: (active: boolean) => ({ padding: "7px 12px", borderRadius: 20, border: `1px solid ${active ? "#3b82f6" : "#d1d5db"}`, background: active ? "#eff6ff" : "white", color: active ? "#1d4ed8" : "#374151", fontSize: 13, fontWeight: 600, fontFamily: "inherit", cursor: "pointer" }),
   panel: { display: "flex", flexWrap: "wrap", gap: 8, padding: 12, background: "#f8fafc", borderRadius: 10, border: "1px solid #e5e7eb" },
@@ -359,6 +435,8 @@ const S: Record<string, any> = {
   appliedRow: { display: "flex", flexWrap: "wrap", alignItems: "center", gap: 6, marginTop: 2 },
   appliedChip: { display: "inline-flex", alignItems: "center", gap: 4, background: "#eff6ff", color: "#1d4ed8", fontSize: 12, fontWeight: 500, padding: "3px 9px", borderRadius: 6 },
   chipX: { cursor: "pointer", color: "#93c5fd", fontWeight: 700 },
+  savedActiveChip: { display: "inline-flex", alignItems: "center", gap: 6, background: "#fffbeb", color: "#b45309", border: "1px solid #fde68a", fontSize: 13, fontWeight: 700, padding: "5px 12px", borderRadius: 8 },
+  savedActiveX: { cursor: "pointer", color: "#d97706", fontWeight: 700 },
   resetBtn: { padding: "3px 10px", background: "none", border: "none", color: "#6b7280", fontSize: 12, fontWeight: 600, cursor: "pointer", textDecoration: "underline" },
   empty: { color: "#9ca3af", fontSize: 14, textAlign: "center", padding: "24px 0" },
   summary: { display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 12px", background: "#f8fafc", borderRadius: 9, marginBottom: 6 },
