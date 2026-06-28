@@ -2,12 +2,12 @@
 from contextlib import asynccontextmanager
 from datetime import date as date_type
 
-from fastapi import Depends, FastAPI, HTTPException, Query
+from fastapi import Depends, FastAPI, File, HTTPException, Query, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import delete
 from sqlalchemy.orm import Session
 
-from . import dashboard, models, schemas
+from . import dashboard, importer, models, schemas
 from .database import SessionLocal, get_db
 from .seed import backfill_category_colors, seed_defaults
 
@@ -95,6 +95,33 @@ def dashboard_top_merchants(month: str | None = None, db: Session = Depends(get_
 def dashboard_comparison(month: str | None = None, db: Session = Depends(get_db)):
     """지난달 대비 증감"""
     return dashboard.comparison(db, month)
+
+
+# ── CSV 가져오기 ──
+@app.post("/import/preview")
+async def import_preview(file: UploadFile = File(...)):
+    """CSV 업로드 → 거래 후보로 파싱해 미리보기 반환 (저장 안 함)"""
+    content = await file.read()
+    return importer.parse_csv(content)
+
+
+@app.post("/import/commit", status_code=201)
+def import_commit(payload: schemas.ImportCommit, db: Session = Depends(get_db)):
+    """확인된 후보들을 거래로 일괄 저장 (source=csv, 원본 가맹점명 보존)"""
+    n = 0
+    for it in payload.items:
+        db.add(models.Transaction(
+            date=it.date,
+            type=it.type,
+            amount=it.amount,
+            raw_merchant=it.merchant or None,
+            alias=it.merchant or None,
+            memo=it.memo,
+            source="csv",
+        ))
+        n += 1
+    db.commit()
+    return {"inserted": n}
 
 
 @app.get("/saved-filters", response_model=list[schemas.SavedFilterRead])
