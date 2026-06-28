@@ -7,7 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import delete
 from sqlalchemy.orm import Session
 
-from . import models, schemas
+from . import dashboard, models, schemas
 from .database import SessionLocal, get_db
 from .seed import backfill_category_colors, seed_defaults
 
@@ -70,6 +70,31 @@ def delete_tag(tag_id: int, db: Session = Depends(get_db)):
     db.execute(delete(models.transaction_tags).where(models.transaction_tags.c.tag_id == tag_id))
     db.delete(tag)
     db.commit()
+
+
+# ── 대시보드 집계 ──
+@app.get("/dashboard/summary")
+def dashboard_summary(month: str | None = None, db: Session = Depends(get_db)):
+    """이번 달 총수입·총지출·잔액"""
+    return dashboard.summary(db, month)
+
+
+@app.get("/dashboard/category-ranking")
+def dashboard_category_ranking(month: str | None = None, db: Session = Depends(get_db)):
+    """상위 지출 카테고리 랭킹"""
+    return dashboard.category_ranking(db, month)
+
+
+@app.get("/dashboard/top-merchants")
+def dashboard_top_merchants(month: str | None = None, db: Session = Depends(get_db)):
+    """자주 가는 가맹점 TOP"""
+    return dashboard.top_merchants(db, month)
+
+
+@app.get("/dashboard/comparison")
+def dashboard_comparison(month: str | None = None, db: Session = Depends(get_db)):
+    """지난달 대비 증감"""
+    return dashboard.comparison(db, month)
 
 
 @app.get("/saved-filters", response_model=list[schemas.SavedFilterRead])
