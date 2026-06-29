@@ -14,6 +14,8 @@ type Candidate = {
   category_id: number | null;
   matched: boolean;
   save_rule: boolean;
+  duplicate: boolean;
+  include: boolean;
 };
 type Rule = { id: number; keyword: string; category_id: number; alias: string | null; priority: number };
 
@@ -61,7 +63,8 @@ export default function ImportView() {
     fd.append("source", source);
     const res = await fetch(`${API}/import/preview`, { method: "POST", body: fd });
     const data = await res.json();
-    setCandidates(data.map((c: any) => ({ ...c, save_rule: false })));
+    // 중복은 기본 체크 해제(안 가져옴)
+    setCandidates(data.map((c: any) => ({ ...c, save_rule: false, include: !c.duplicate })));
     setLoading(false);
     e.target.value = "";
   }
@@ -71,10 +74,11 @@ export default function ImportView() {
   }
 
   async function commit() {
+    const items = candidates.filter((c) => c.include);
     const res = await fetch(`${API}/import/commit`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ items: candidates }),
+      body: JSON.stringify({ items }),
     });
     const data = await res.json();
     setMsg(`${data.inserted}건을 가져왔어요. 거래 내역에서 확인하세요.`);
@@ -112,6 +116,8 @@ export default function ImportView() {
   }
 
   const matchedCount = candidates.filter((c) => c.matched).length;
+  const dupCount = candidates.filter((c) => c.duplicate).length;
+  const includeCount = candidates.filter((c) => c.include).length;
 
   return (
     <div style={S.page}>
@@ -144,14 +150,20 @@ export default function ImportView() {
           <div style={S.previewHead}>
             <div>
               <span style={S.cardTitle}>미리보기 ({candidates.length}건)</span>
-              <span style={S.autoInfo}>자동분류 {matchedCount}건 · 분류 필요 {candidates.length - matchedCount}건</span>
+              <span style={S.autoInfo}>
+                자동분류 {matchedCount}건 · 분류 필요 {candidates.length - matchedCount}건
+                {dupCount > 0 && ` · 중복 ${dupCount}건(제외)`}
+              </span>
             </div>
-            <button onClick={commit} style={S.commitBtn}>{candidates.length}건 가져오기</button>
+            <button onClick={commit} disabled={includeCount === 0} style={{ ...S.commitBtn, opacity: includeCount === 0 ? 0.4 : 1 }}>
+              {includeCount}건 가져오기
+            </button>
           </div>
           <div style={S.tableWrap}>
             <table style={S.table}>
               <thead>
                 <tr>
+                  <th style={{ ...S.th, textAlign: "center" }}>포함</th>
                   <th style={S.th}>날짜</th>
                   <th style={S.th}>가맹점(별칭)</th>
                   <th style={S.th}>카테고리</th>
@@ -161,11 +173,17 @@ export default function ImportView() {
               </thead>
               <tbody>
                 {candidates.map((c, i) => (
-                  <tr key={i} style={c.matched ? undefined : S.unmatchedRow}>
+                  <tr key={i} style={c.duplicate ? S.dupRow : c.matched ? undefined : S.unmatchedRow}>
+                    <td style={{ ...S.td, textAlign: "center" }}>
+                      <input type="checkbox" checked={c.include} onChange={(e) => updateCand(i, { include: e.target.checked })} />
+                    </td>
                     <td style={S.td}>{c.date}</td>
                     <td style={S.td}>
                       <input value={c.alias ?? ""} onChange={(e) => updateCand(i, { alias: e.target.value })} style={S.aliasInput} />
-                      <div style={S.rawName}>원본: {c.merchant}</div>
+                      <div style={S.rawName}>
+                        원본: {c.merchant}
+                        {c.duplicate && <span style={S.dupBadge}>이미 있음</span>}
+                      </div>
                     </td>
                     <td style={S.td}>
                       <select value={c.category_id ?? ""} onChange={(e) => updateCand(i, { category_id: e.target.value ? Number(e.target.value) : null })} style={S.catSel}>
@@ -248,6 +266,8 @@ const S: Record<string, any> = {
   th: { textAlign: "left", padding: "8px 10px", borderBottom: "2px solid #f1f5f9", color: "#6b7280", fontWeight: 600, fontSize: 12, whiteSpace: "nowrap" },
   td: { padding: "8px 10px", borderBottom: "1px solid #f8fafc", verticalAlign: "middle", fontVariantNumeric: "tabular-nums" },
   unmatchedRow: { background: "#fffbeb" },
+  dupRow: { background: "#f8fafc", color: "#9ca3af" },
+  dupBadge: { marginLeft: 6, fontSize: 10, fontWeight: 700, color: "#92400e", background: "#fef3c7", padding: "1px 6px", borderRadius: 4 },
   aliasInput: { width: 140, padding: "5px 8px", borderRadius: 7, border: "1px solid #d1d5db", fontSize: 13, fontFamily: "inherit" },
   rawName: { fontSize: 11, color: "#9ca3af", marginTop: 3 },
   catSel: { padding: "6px 8px", borderRadius: 7, border: "1px solid #d1d5db", fontSize: 12.5, fontFamily: "inherit", background: "white", maxWidth: 140 },

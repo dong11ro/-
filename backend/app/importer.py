@@ -105,3 +105,8 @@ def parse(filename: str, content: bytes, source: str) -> list[dict]:
     """source(양식)에 맞는 파서로 거래 후보 생성."""
     parser = PARSERS.get(source, parse_simple)
     return parser(read_grid(filename, content))
+
+
+def fingerprint(date, type_, amount, merchant) -> str:
+    """중복 감지용 지문: 날짜+유형+금액+원본가맹점. 미리보기·커밋에서 동일하게 생성."""
+    return f"{date}|{type_}|{float(amount):.2f}|{merchant or ''}"

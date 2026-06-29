@@ -162,6 +162,11 @@ async def import_preview(
         c["category_id"] = cat_id
         c["alias"] = alias or raw or None   # 규칙 별칭 있으면 그걸로, 없으면 원문
         c["matched"] = cat_id is not None
+        # 중복 감지: 같은 지문 거래가 이미 DB에 있나
+        ext = importer.fingerprint(c["date"], c["type"], c["amount"], raw)
+        c["duplicate"] = db.query(models.Transaction.id).filter(
+            models.Transaction.external_ref == ext
+        ).first() is not None
     return candidates
 
 
@@ -179,6 +184,7 @@ def import_commit(payload: schemas.ImportCommit, db: Session = Depends(get_db)):
             memo=it.memo,
             category_id=it.category_id,
             source="csv",
+            external_ref=importer.fingerprint(it.date.isoformat(), it.type, it.amount, it.merchant),
         ))
         n += 1
         # 규칙 저장(체크 + 별칭 + 카테고리 있을 때). 키워드=별칭(원문에 포함되는 정리된 이름)
