@@ -97,17 +97,77 @@ def dashboard_comparison(month: str | None = None, db: Session = Depends(get_db)
     return dashboard.comparison(db, month)
 
 
-# ── CSV 가져오기 ──
+# ── 가맹점 자동분류 규칙 ──
+@app.get("/merchant-rules", response_model=list[schemas.MerchantRuleRead])
+def list_merchant_rules(db: Session = Depends(get_db)):
+    """가맹점 규칙 목록 (우선순위순)"""
+    return db.query(models.MerchantRule).order_by(
+        models.MerchantRule.priority.desc(), models.MerchantRule.id
+    ).all()
+
+
+@app.post("/merchant-rules", response_model=schemas.MerchantRuleRead, status_code=201)
+def create_merchant_rule(payload: schemas.MerchantRuleCreate, db: Session = Depends(get_db)):
+    """가맹점 규칙 생성"""
+    rule = models.MerchantRule(**payload.model_dump())
+    db.add(rule)
+    db.commit()
+    db.refresh(rule)
+    return rule
+
+
+@app.put("/merchant-rules/{rule_id}", response_model=schemas.MerchantRuleRead)
+def update_merchant_rule(rule_id: int, payload: schemas.MerchantRuleCreate, db: Session = Depends(get_db)):
+    """가맹점 규칙 수정"""
+    rule = db.get(models.MerchantRule, rule_id)
+    if rule is None:
+        raise HTTPException(status_code=404, detail="규칙을 찾을 수 없음")
+    for field, value in payload.model_dump().items():
+        setattr(rule, field, value)
+    db.commit()
+    db.refresh(rule)
+    return rule
+
+
+@app.delete("/merchant-rules/{rule_id}", status_code=204)
+def delete_merchant_rule(rule_id: int, db: Session = Depends(get_db)):
+    """가맹점 규칙 삭제"""
+    rule = db.get(models.MerchantRule, rule_id)
+    if rule is None:
+        raise HTTPException(status_code=404, detail="규칙을 찾을 수 없음")
+    db.delete(rule)
+    db.commit()
+
+
+def _classify(raw: str, rules: list[models.MerchantRule]) -> tuple[int | None, str | None]:
+    """가맹점 원문에 키워드가 포함된 규칙을 찾아 (category_id, alias) 반환. 우선순위순."""
+    for r in rules:
+        if r.keyword and r.keyword in raw:
+            return r.category_id, r.alias
+    return None, None
+
+
+# ── 파일 가져오기 ──
 @app.post("/import/preview")
-async def import_preview(file: UploadFile = File(...), source: str = Form("simple")):
-    """파일 업로드 → 양식(source)에 맞게 파싱해 미리보기 반환 (저장 안 함). CSV/xls/xlsx 지원."""
+async def import_preview(
+    file: UploadFile = File(...), source: str = Form("simple"), db: Session = Depends(get_db)
+):
+    """파일 파싱 + 가맹점 규칙으로 자동분류해 미리보기 반환 (저장 안 함). CSV/xls/xlsx 지원."""
     content = await file.read()
-    return importer.parse(file.filename or "", content, source)
+    candidates = importer.parse(file.filename or "", content, source)
+    rules = db.query(models.MerchantRule).order_by(models.MerchantRule.priority.desc()).all()
+    for c in candidates:
+        raw = c.get("merchant") or ""
+        cat_id, alias = _classify(raw, rules)
+        c["category_id"] = cat_id
+        c["alias"] = alias or raw or None   # 규칙 별칭 있으면 그걸로, 없으면 원문
+        c["matched"] = cat_id is not None
+    return candidates
 
 
 @app.post("/import/commit", status_code=201)
 def import_commit(payload: schemas.ImportCommit, db: Session = Depends(get_db)):
-    """확인된 후보들을 거래로 일괄 저장 (source=csv, 원본 가맹점명 보존)"""
+    """확인된 후보들을 거래로 일괄 저장. save_rule이면 분류 규칙도 생성."""
     n = 0
     for it in payload.items:
         db.add(models.Transaction(
@@ -115,11 +175,17 @@ def import_commit(payload: schemas.ImportCommit, db: Session = Depends(get_db)):
             type=it.type,
             amount=it.amount,
             raw_merchant=it.merchant or None,
-            alias=it.merchant or None,
+            alias=(it.alias or it.merchant) or None,
             memo=it.memo,
+            category_id=it.category_id,
             source="csv",
         ))
         n += 1
+        # 규칙 저장(체크 + 별칭 + 카테고리 있을 때). 키워드=별칭(원문에 포함되는 정리된 이름)
+        if it.save_rule and it.alias and it.category_id:
+            exists = db.query(models.MerchantRule).filter(models.MerchantRule.keyword == it.alias).first()
+            if not exists:
+                db.add(models.MerchantRule(keyword=it.alias, category_id=it.category_id, alias=it.alias))
     db.commit()
     return {"inserted": n}
 

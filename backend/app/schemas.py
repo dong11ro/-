@@ -82,13 +82,35 @@ class SavedFilterRead(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class MerchantRuleCreate(BaseModel):
+    """가맹점 자동분류 규칙 생성"""
+    keyword: str
+    category_id: int
+    alias: Optional[str] = None
+    priority: int = 0
+
+
+class MerchantRuleRead(BaseModel):
+    """가맹점 규칙 응답"""
+    id: int
+    keyword: str
+    category_id: int
+    alias: Optional[str]
+    priority: int
+
+    model_config = {"from_attributes": True}
+
+
 class ImportCandidate(BaseModel):
-    """CSV에서 파싱된 거래 후보 (미리보기·커밋 공용)"""
+    """파싱된 거래 후보 (커밋용; 미리보기는 분류 결과를 더해 dict로 반환)"""
     date: date_type
     type: Literal["income", "expense"]
     amount: Decimal
-    merchant: Optional[str] = None
+    merchant: Optional[str] = None       # 원본 가맹점명(raw)
+    alias: Optional[str] = None          # 정리된 이름
     memo: Optional[str] = None
+    category_id: Optional[int] = None
+    save_rule: bool = False              # 체크 시 이 분류를 규칙으로 저장
 
 
 class ImportCommit(BaseModel):
