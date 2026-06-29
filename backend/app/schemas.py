@@ -118,6 +118,17 @@ class ImportCommit(BaseModel):
     items: list[ImportCandidate]
 
 
+class BudgetSet(BaseModel):
+    """기본 월예산 설정 (null이면 해제)"""
+    amount: Optional[Decimal] = None
+
+
+class MonthBudgetSet(BaseModel):
+    """특정 달 예산 덮어쓰기"""
+    month: str
+    amount: Optional[Decimal] = None
+
+
 class TransactionRead(BaseModel):
     """거래 응답 (서버 → 클라이언트)"""
     id: int
