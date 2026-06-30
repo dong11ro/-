@@ -96,6 +96,10 @@ def build(db: Session, start_ym: str, end_ym: str, merchant_sort: str = "amount"
         top = top_of(t)
         return kinds.kind_of(top.name if top else None) == "consumption"
 
+    def is_variable(t) -> bool:
+        """변동 소비인가 (고정지출 제외) — 가맹점/요일별 패턴용."""
+        return is_consumption(t) and not t.is_fixed
+
     # 월별 수입 / 소비
     m_inc, m_exp = defaultdict(float), defaultdict(float)
     for t in txs:
@@ -155,7 +159,7 @@ def build(db: Session, start_ym: str, end_ym: str, merchant_sort: str = "amount"
     wd_names = ["월", "화", "수", "목", "금", "토", "일"]
     wd_sum = defaultdict(float)
     for t in txs:
-        if is_consumption(t):
+        if is_variable(t):  # 고정지출 제외
             wd_sum[t.date.weekday()] += float(t.amount)
     wd_count = [0] * 7
     d = first
@@ -167,7 +171,7 @@ def build(db: Session, start_ym: str, end_ym: str, merchant_sort: str = "amount"
     # 가맹점 TOP (소비만)
     mch: dict[str, dict] = {}
     for t in txs:
-        if not is_consumption(t):
+        if not is_variable(t):   # 고정지출 제외
             continue
         name = t.alias or t.raw_merchant
         if not name:

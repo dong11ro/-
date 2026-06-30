@@ -16,6 +16,7 @@ class TransactionCreate(BaseModel):
     raw_merchant: Optional[str] = None
     alias: Optional[str] = None
     memo: Optional[str] = None
+    is_fixed: bool = False
     tags: list[str] = []                   # 태그 이름 목록 (없으면 빈 리스트)
 
 
@@ -29,6 +30,7 @@ class TransactionUpdate(BaseModel):
     raw_merchant: Optional[str] = None
     alias: Optional[str] = None
     memo: Optional[str] = None
+    is_fixed: Optional[bool] = None
     tags: Optional[list[str]] = None       # None이면 태그 안 건드림, 리스트면 통째로 교체
 
 
@@ -118,6 +120,33 @@ class ImportCommit(BaseModel):
     items: list[ImportCandidate]
 
 
+class RecurringTemplateCreate(BaseModel):
+    """고정 지출 템플릿 생성/수정"""
+    name: str
+    amount: Optional[Decimal] = None
+    category_id: Optional[int] = None
+    payment_method_id: Optional[int] = None
+    is_active: bool = True
+
+
+class RecurringTemplateRead(BaseModel):
+    """고정 지출 템플릿 응답"""
+    id: int
+    name: str
+    amount: Optional[Decimal]
+    category_id: Optional[int]
+    payment_method_id: Optional[int]
+    is_active: bool
+
+    model_config = {"from_attributes": True}
+
+
+class TemplateAdd(BaseModel):
+    """템플릿 → 오늘 거래 추가 (금액/날짜 그 자리서 조정)"""
+    date: Optional[date_type] = None
+    amount: Optional[Decimal] = None
+
+
 class BudgetSet(BaseModel):
     """기본 월예산 설정 (null이면 해제)"""
     amount: Optional[Decimal] = None
@@ -141,6 +170,7 @@ class TransactionRead(BaseModel):
     alias: Optional[str]
     memo: Optional[str]
     source: str
+    is_fixed: Optional[bool] = False
     tags: list[str] = []
 
     model_config = {"from_attributes": True}

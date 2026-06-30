@@ -137,7 +137,8 @@ def top_merchants(db: Session, month: str | None, limit: int = 5) -> list[dict]:
             models.Transaction.date >= first,
             models.Transaction.date < nxt,
             name_expr.isnot(None),
-            *_consumption_only(_noncon_ids(db)),  # 비소비 제외
+            models.Transaction.is_fixed.isnot(True),  # 고정지출 제외
+            *_consumption_only(_noncon_ids(db)),       # 비소비 제외
         )
         .group_by(name_expr)
         .order_by(func.sum(models.Transaction.amount).desc())

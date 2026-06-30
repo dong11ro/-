@@ -60,6 +60,7 @@ class Transaction(Base):
     memo = Column(String)
     source = Column(String, default="manual")          # manual/csv/template/ocr
     external_ref = Column(String)                      # 중복감지용
+    is_fixed = Column(Boolean, default=False)          # 고정지출 여부 (변동 분석에서 제외)
 
     tags = relationship("Tag", secondary=transaction_tags)
 

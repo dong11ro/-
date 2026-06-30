@@ -5,6 +5,7 @@ const ITEMS: { key: View; label: string }[] = [
   { key: "transactions", label: "거래 내역" },
   { key: "import", label: "가져오기" },
   { key: "analysis", label: "분석" },
+  { key: "fixed", label: "고정 지출" },
 ];
 const SOON = ["예산", "설정"]; // 아직 미구현 (디자인 자리만)
 
