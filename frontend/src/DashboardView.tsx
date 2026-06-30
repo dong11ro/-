@@ -37,6 +37,7 @@ export default function DashboardView() {
   const [ranking, setRanking] = useState<RankItem[]>([]);
   const [merchants, setMerchants] = useState<Merchant[]>([]);
   const [comparison, setComparison] = useState<Comparison | null>(null);
+  const [cashflow, setCashflow] = useState<{ income: number; consumption: number; saving: number; investment: number; transfer: number; net: number } | null>(null);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [pickerYear, setPickerYear] = useState(() => new Date().getFullYear());
 
@@ -46,6 +47,7 @@ export default function DashboardView() {
     fetch(`${API}/dashboard/category-ranking${q}`).then((r) => r.json()).then(setRanking);
     fetch(`${API}/dashboard/top-merchants${q}`).then((r) => r.json()).then(setMerchants);
     fetch(`${API}/dashboard/comparison${q}`).then((r) => r.json()).then(setComparison);
+    fetch(`${API}/dashboard/cashflow${q}`).then((r) => r.json()).then(setCashflow);
   }, [month]);
 
   const [y, m] = month.split("-").map(Number);
@@ -125,6 +127,33 @@ export default function DashboardView() {
           <div style={{ ...S.kpiValue, color: "#2563eb" }}>{won(summary?.balance ?? 0)}</div>
         </div>
       </div>
+
+      {/* 현금 흐름 */}
+      {cashflow && (
+        <div style={S.cfCard}>
+          <div style={S.cfTitle}>이번 달 현금 흐름</div>
+          <div style={S.cfRow}>
+            {[
+              { label: "수입", v: cashflow.income, color: "#16a34a" },
+              { label: "소비", v: cashflow.consumption, color: "#dc2626" },
+              { label: "저축", v: cashflow.saving, color: "#0891b2" },
+              { label: "투자", v: cashflow.investment, color: "#7c3aed" },
+              { label: "이체", v: cashflow.transfer, color: "#64748b" },
+            ].map((it) => (
+              <div key={it.label} style={S.cfItem}>
+                <div style={S.cfLabel}>{it.label}</div>
+                <div style={{ ...S.cfVal, color: it.color }}>{won(it.v)}</div>
+              </div>
+            ))}
+            <div style={{ ...S.cfItem, borderLeft: "1px solid #e5e7eb", paddingLeft: 14 }}>
+              <div style={S.cfLabel}>순변화</div>
+              <div style={{ ...S.cfVal, color: cashflow.net >= 0 ? "#16a34a" : "#dc2626", fontWeight: 800 }}>
+                {cashflow.net >= 0 ? "+" : "-"}{won(cashflow.net)}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       <div style={S.twoCol}>
         {/* 상위 지출 카테고리 */}
@@ -217,6 +246,12 @@ const S: Record<string, any> = {
   kpi: { background: "white", borderRadius: 12, padding: "16px 18px", boxShadow: "0 1px 3px rgba(0,0,0,.05)" },
   kpiLabel: { fontSize: 12, color: "#6b7280", fontWeight: 500, marginBottom: 8 },
   kpiValue: { fontSize: 21, fontWeight: 700, letterSpacing: "-0.5px", fontVariantNumeric: "tabular-nums" },
+  cfCard: { background: "white", borderRadius: 12, padding: "14px 18px", boxShadow: "0 1px 3px rgba(0,0,0,.05)", marginBottom: 12 },
+  cfTitle: { fontSize: 13, fontWeight: 700, marginBottom: 12, color: "#374151" },
+  cfRow: { display: "flex", flexWrap: "wrap", gap: 20, alignItems: "center" },
+  cfItem: { minWidth: 64 },
+  cfLabel: { fontSize: 11, color: "#9ca3af", fontWeight: 500, marginBottom: 4 },
+  cfVal: { fontSize: 15, fontWeight: 700, fontVariantNumeric: "tabular-nums" },
   twoCol: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 12 },
   card: { background: "white", borderRadius: 12, padding: 18, boxShadow: "0 1px 3px rgba(0,0,0,.05)", marginBottom: 12 },
   cardTitle: { fontSize: 14, fontWeight: 700, marginBottom: 14 },

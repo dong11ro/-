@@ -128,7 +128,7 @@ export default function AnalysisView() {
 
       {/* KPI */}
       <div style={S.kpiRow}>
-        <Kpi label="기간 총지출" value={"-" + won(data.summary.total_expense)} color="#dc2626" />
+        <Kpi label="기간 소비" value={"-" + won(data.summary.total_expense)} color="#dc2626" />
         <Kpi label="월평균 지출" value={won(data.summary.avg_expense)} color="#374151" />
         <Kpi label="기간 저축액" value={(data.summary.savings >= 0 ? "+" : "-") + won(data.summary.savings)} color={data.summary.savings >= 0 ? "#16a34a" : "#dc2626"} />
         <Kpi label="저축률" value={data.summary.savings_rate == null ? "–" : data.summary.savings_rate + "%"} color="#2563eb" />
@@ -214,7 +214,7 @@ export default function AnalysisView() {
       <div style={S.twoCol}>
         {/* 요일별 지출 */}
         <div style={S.card}>
-          <div style={S.cardTitle}>요일별 지출</div>
+          <div style={S.cardTitle}>요일별 지출 <span style={{ fontWeight: 400, fontSize: 11.5, color: "#9ca3af" }}>일평균 · 소비만</span></div>
           {data.weekday.map((w) => (
             <div key={w.day} style={S.wdRow}>
               <span style={S.wdDay}>{w.day}</span>

@@ -4,7 +4,7 @@ from datetime import date
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from . import models
+from . import kinds, models
 
 
 def month_bounds(month: str | None) -> tuple[date, date]:
@@ -82,6 +82,27 @@ def _expense_by_top(db: Session, first: date, nxt: date) -> dict[str, dict]:
         e = agg.setdefault(top.name, {"name": top.name, "color": top.color, "amount": 0.0})
         e["amount"] += float(amt)
     return agg
+
+
+def cashflow(db: Session, month: str | None) -> dict:
+    """이번 달 현금 흐름: 수입 / 소비 / 저축 / 투자 / 이체 / 순변화."""
+    first, nxt = month_bounds(month)
+    resolve = _top_resolver(db)
+    txs = db.query(models.Transaction).filter(
+        models.Transaction.date >= first, models.Transaction.date < nxt
+    ).all()
+    out = {"income": 0.0, "consumption": 0.0, "saving": 0.0, "investment": 0.0, "transfer": 0.0}
+    for t in txs:
+        amt = float(t.amount)
+        if t.type == "income":
+            out["income"] += amt
+            continue
+        top = resolve(t.category_id) if t.category_id else None
+        k = kinds.kind_of(top.name if top else None)
+        bucket = {"saving": "saving", "investment": "investment", "transfer": "transfer"}.get(k, "consumption")
+        out[bucket] += amt
+    out["net"] = out["income"] - (out["consumption"] + out["saving"] + out["investment"] + out["transfer"])
+    return {k: round(v) for k, v in out.items()}
 
 
 def category_ranking(db: Session, month: str | None) -> list[dict]:

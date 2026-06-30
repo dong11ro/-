@@ -15,6 +15,13 @@ EXPENSE_CATEGORIES = {
     "경조사·기타": ["선물", "경조사비", "수수료"],
 }
 
+# 비소비(자산 이동) 카테고리 — 소비 분석에서 제외, 현금흐름에만 집계
+NONCONSUMPTION_CATEGORIES = {
+    "저축": ["적금", "예금"],
+    "투자": ["주식", "펀드", "코인"],
+    "이체": ["송금", "계좌이동"],
+}
+
 INCOME_CATEGORIES = ["급여", "용돈", "이자·투자수익", "환급", "기타수입"]
 
 PAYMENT_METHODS = ["현금", "체크카드", "신용카드", "계좌이체", "간편결제"]
@@ -29,6 +36,9 @@ CATEGORY_COLORS = {
     "문화·여가": "#ec4899",
     "쇼핑": "#f59e0b",
     "경조사·기타": "#94a3b8",
+    "저축": "#0891b2",
+    "투자": "#7c3aed",
+    "이체": "#64748b",
 }
 INCOME_COLOR = "#16a34a"
 
@@ -36,7 +46,7 @@ INCOME_COLOR = "#16a34a"
 def seed_defaults(db: Session) -> None:
     """카테고리·결제수단이 하나도 없으면 기본값을 넣는다."""
     if db.query(models.Category).count() == 0:
-        for parent_name, children in EXPENSE_CATEGORIES.items():
+        for parent_name, children in {**EXPENSE_CATEGORIES, **NONCONSUMPTION_CATEGORIES}.items():
             parent = models.Category(name=parent_name, type="expense", is_default=True)
             db.add(parent)
             db.flush()  # parent.id 확보
@@ -52,6 +62,27 @@ def seed_defaults(db: Session) -> None:
             db.add(models.PaymentMethod(name=name))
 
     db.commit()
+
+
+def backfill_noncon_categories(db: Session) -> None:
+    """비소비 카테고리(저축/투자/이체)가 없으면 추가 (기존 DB 대상)."""
+    changed = False
+    for parent_name, children in NONCONSUMPTION_CATEGORIES.items():
+        parent = db.query(models.Category).filter(
+            models.Category.name == parent_name, models.Category.parent_id.is_(None)
+        ).first()
+        if parent is None:
+            parent = models.Category(name=parent_name, type="expense", is_default=True)
+            db.add(parent)
+            db.flush()
+            changed = True
+        existing = {c.name for c in db.query(models.Category).filter(models.Category.parent_id == parent.id).all()}
+        for ch in children:
+            if ch not in existing:
+                db.add(models.Category(name=ch, type="expense", parent_id=parent.id, is_default=True))
+                changed = True
+    if changed:
+        db.commit()
 
 
 def backfill_category_colors(db: Session) -> None:

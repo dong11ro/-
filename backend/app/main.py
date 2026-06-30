@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 
 from . import analysis, dashboard, importer, models, schemas
 from .database import SessionLocal, get_db
-from .seed import backfill_category_colors, seed_defaults
+from .seed import backfill_category_colors, backfill_noncon_categories, seed_defaults
 
 
 @asynccontextmanager
@@ -19,7 +19,8 @@ async def lifespan(app: FastAPI):
     db = SessionLocal()
     try:
         seed_defaults(db)
-        backfill_category_colors(db)  # 카테고리 색 채우기 (없는 것만)
+        backfill_noncon_categories(db)  # 비소비 카테고리(저축/투자/이체) 추가
+        backfill_category_colors(db)    # 카테고리 색 채우기 (없는 것만)
     finally:
         db.close()
     yield
@@ -95,6 +96,12 @@ def dashboard_top_merchants(month: str | None = None, db: Session = Depends(get_
 def dashboard_comparison(month: str | None = None, db: Session = Depends(get_db)):
     """지난달 대비 증감"""
     return dashboard.comparison(db, month)
+
+
+@app.get("/dashboard/cashflow")
+def dashboard_cashflow(month: str | None = None, db: Session = Depends(get_db)):
+    """이번 달 현금 흐름 (수입/소비/저축/투자/이체/순변화)"""
+    return dashboard.cashflow(db, month)
 
 
 # ── 분석 ──
