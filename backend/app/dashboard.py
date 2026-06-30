@@ -1,10 +1,29 @@
 """대시보드 집계 로직 (거래를 SUM·GROUP BY로 요약). 순수 계산 함수 모음."""
 from datetime import date
 
-from sqlalchemy import func
+from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 
 from . import kinds, models
+
+
+def _noncon_ids(db: Session) -> set[int]:
+    """비소비(저축/투자/이체) 대분류에 속하는 모든 카테고리 id."""
+    cats = db.query(models.Category).all()
+    by_id = {c.id: c for c in cats}
+
+    def top_name(c):
+        while c.parent_id in by_id:
+            c = by_id[c.parent_id]
+        return c.name
+    return {c.id for c in cats if kinds.kind_of(top_name(c)) != "consumption"}
+
+
+def _consumption_only(noncon: set[int]):
+    """소비 지출만 거르는 필터 조건 (미분류는 소비로 간주)."""
+    if not noncon:
+        return []
+    return [or_(models.Transaction.category_id.is_(None), models.Transaction.category_id.notin_(noncon))]
 
 
 def month_bounds(month: str | None) -> tuple[date, date]:
@@ -27,22 +46,13 @@ def _prev_month(month: str | None) -> str:
 
 
 def summary(db: Session, month: str | None) -> dict:
-    """이번 달 총수입·총지출·잔액·건수."""
+    """이번 달 총수입·소비지출·잔액·건수 (지출은 소비만)."""
     first, nxt = month_bounds(month)
-    rows = (
-        db.query(models.Transaction.type, func.sum(models.Transaction.amount), func.count())
-        .filter(models.Transaction.date >= first, models.Transaction.date < nxt)
-        .group_by(models.Transaction.type)
-        .all()
-    )
-    income = expense = 0.0
-    count = 0
-    for t, amt, cnt in rows:
-        count += cnt
-        if t == "income":
-            income = float(amt)
-        else:
-            expense = float(amt)
+    rng = [models.Transaction.date >= first, models.Transaction.date < nxt]
+    cons = _consumption_only(_noncon_ids(db))
+    income = float(db.query(func.coalesce(func.sum(models.Transaction.amount), 0)).filter(*rng, models.Transaction.type == "income").scalar())
+    expense = float(db.query(func.coalesce(func.sum(models.Transaction.amount), 0)).filter(*rng, models.Transaction.type == "expense", *cons).scalar())
+    count = db.query(func.count(models.Transaction.id)).filter(*rng).scalar()
     return {"income": income, "expense": expense, "balance": income - expense, "count": count}
 
 
@@ -77,7 +87,7 @@ def _expense_by_top(db: Session, first: date, nxt: date) -> dict[str, dict]:
     agg: dict[str, dict] = {}
     for cat_id, amt in rows:
         top = resolve(cat_id)
-        if top is None:
+        if top is None or kinds.kind_of(top.name) != "consumption":  # 비소비 제외
             continue
         e = agg.setdefault(top.name, {"name": top.name, "color": top.color, "amount": 0.0})
         e["amount"] += float(amt)
@@ -127,6 +137,7 @@ def top_merchants(db: Session, month: str | None, limit: int = 5) -> list[dict]:
             models.Transaction.date >= first,
             models.Transaction.date < nxt,
             name_expr.isnot(None),
+            *_consumption_only(_noncon_ids(db)),  # 비소비 제외
         )
         .group_by(name_expr)
         .order_by(func.sum(models.Transaction.amount).desc())

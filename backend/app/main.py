@@ -189,6 +189,23 @@ def delete_merchant_rule(rule_id: int, db: Session = Depends(get_db)):
     db.commit()
 
 
+@app.post("/merchant-rules/apply")
+def apply_rules_existing(db: Session = Depends(get_db)):
+    """기존 '미분류' 거래에 규칙을 적용해 카테고리·별칭 채움 (과거 데이터 정리)."""
+    rules = db.query(models.MerchantRule).order_by(models.MerchantRule.priority.desc()).all()
+    updated = 0
+    for tx in db.query(models.Transaction).filter(models.Transaction.category_id.is_(None)).all():
+        raw = tx.raw_merchant or tx.alias or ""
+        cat_id, alias = _classify(raw, rules)
+        if cat_id is not None:
+            tx.category_id = cat_id
+            if alias:
+                tx.alias = alias
+            updated += 1
+    db.commit()
+    return {"updated": updated}
+
+
 def _classify(raw: str, rules: list[models.MerchantRule]) -> tuple[int | None, str | None]:
     """가맹점 원문에 키워드가 포함된 규칙을 찾아 (category_id, alias) 반환. 우선순위순."""
     for r in rules:
