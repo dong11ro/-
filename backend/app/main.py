@@ -7,7 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import delete
 from sqlalchemy.orm import Session
 
-from . import dashboard, importer, models, schemas
+from . import analysis, dashboard, importer, models, schemas
 from .database import SessionLocal, get_db
 from .seed import backfill_category_colors, seed_defaults
 
@@ -95,6 +95,49 @@ def dashboard_top_merchants(month: str | None = None, db: Session = Depends(get_
 def dashboard_comparison(month: str | None = None, db: Session = Depends(get_db)):
     """지난달 대비 증감"""
     return dashboard.comparison(db, month)
+
+
+# ── 분석 ──
+@app.get("/analysis")
+def analysis_build(start: str, end: str, merchant_sort: str = "amount", db: Session = Depends(get_db)):
+    """(시작월~끝월) 범위 분석 집계 (추이/KPI/카테고리/요일/가맹점/예산)"""
+    return analysis.build(db, start, end, merchant_sort)
+
+
+# ── 총예산 (기본 월예산 + 월별 덮어쓰기) ──
+@app.get("/budget/total")
+def get_total_budget(db: Session = Depends(get_db)):
+    default, overrides = analysis._get_budgets(db)
+    return {"default": default, "overrides": overrides}
+
+
+def _upsert_budget(db: Session, period: str, amount: float | None):
+    """scope_type=total 예산 행을 갱신/삭제. amount None이면 삭제."""
+    row = db.query(models.Budget).filter(
+        models.Budget.scope_type == "total", models.Budget.period == period
+    ).first()
+    if amount is None:
+        if row:
+            db.delete(row)
+    elif row:
+        row.limit_amount = amount
+    else:
+        db.add(models.Budget(scope_type="total", period=period, limit_amount=amount))
+    db.commit()
+
+
+@app.put("/budget/total/default")
+def set_default_budget(payload: schemas.BudgetSet, db: Session = Depends(get_db)):
+    """기본 월예산 설정 (amount=null이면 해제)"""
+    _upsert_budget(db, analysis.DEFAULT_PERIOD, float(payload.amount) if payload.amount is not None else None)
+    return {"ok": True}
+
+
+@app.put("/budget/total/month")
+def set_month_budget(payload: schemas.MonthBudgetSet, db: Session = Depends(get_db)):
+    """특정 달 예산 덮어쓰기 (amount=null이면 해제 → 기본값 사용)"""
+    _upsert_budget(db, payload.month, float(payload.amount) if payload.amount is not None else None)
+    return {"ok": True}
 
 
 # ── 가맹점 자동분류 규칙 ──
