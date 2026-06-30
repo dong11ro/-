@@ -91,6 +91,12 @@ export default function ImportView() {
     loadRules();
   }
 
+  async function applyToExisting() {
+    const res = await fetch(`${API}/merchant-rules/apply`, { method: "POST" });
+    const d = await res.json();
+    setMsg(`기존 미분류 거래 ${d.updated}건이 규칙으로 분류됐어요.`);
+  }
+
   async function addRule() {
     if (!newKw.trim() || !newCat) return;
     await fetch(`${API}/merchant-rules`, {
@@ -209,8 +215,11 @@ export default function ImportView() {
 
       {/* 분류 규칙 관리 */}
       <div style={S.card}>
-        <div style={S.cardTitle}>분류 규칙 ({rules.length})</div>
-        <div style={S.ruleSub}>가맹점명에 키워드가 포함되면 → 그 카테고리·별칭으로 자동 분류돼요.</div>
+        <div style={S.ruleHead}>
+          <span style={S.cardTitle}>분류 규칙 ({rules.length})</span>
+          <button onClick={applyToExisting} style={S.applyBtn}>기존 거래에 규칙 적용</button>
+        </div>
+        <div style={S.ruleSub}>가맹점명에 키워드가 포함되면 → 그 카테고리·별칭으로 자동 분류돼요. (송금→이체, 적금→저축 등은 소비 분석에서 제외)</div>
 
         {/* 직접 추가 */}
         <div style={S.ruleEditRow}>
@@ -273,6 +282,8 @@ const S: Record<string, any> = {
   catSel: { padding: "6px 8px", borderRadius: 7, border: "1px solid #d1d5db", fontSize: 12.5, fontFamily: "inherit", background: "white", maxWidth: 140 },
   ruleHint: { fontSize: 12, color: "#9ca3af", marginTop: 12 },
   empty: { fontSize: 13, color: "#9ca3af", padding: "16px 0", textAlign: "center" },
+  ruleHead: { display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 },
+  applyBtn: { padding: "7px 13px", background: "#f0fdf4", color: "#15803d", border: "1px solid #bbf7d0", borderRadius: 8, fontSize: 12.5, fontWeight: 600, fontFamily: "inherit", cursor: "pointer" },
   ruleSub: { fontSize: 12.5, color: "#9ca3af", margin: "8px 0 14px" },
   ruleList: { display: "flex", flexDirection: "column", gap: 6 },
   ruleEditRow: { display: "flex", alignItems: "center", gap: 6, padding: "8px 0", flexWrap: "wrap" },

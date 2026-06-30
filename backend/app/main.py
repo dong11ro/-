@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 
 from . import analysis, dashboard, importer, models, schemas
 from .database import SessionLocal, get_db
-from .seed import backfill_category_colors, seed_defaults
+from .seed import backfill_category_colors, backfill_noncon_categories, seed_defaults
 
 
 @asynccontextmanager
@@ -19,7 +19,8 @@ async def lifespan(app: FastAPI):
     db = SessionLocal()
     try:
         seed_defaults(db)
-        backfill_category_colors(db)  # 카테고리 색 채우기 (없는 것만)
+        backfill_noncon_categories(db)  # 비소비 카테고리(저축/투자/이체) 추가
+        backfill_category_colors(db)    # 카테고리 색 채우기 (없는 것만)
     finally:
         db.close()
     yield
@@ -95,6 +96,12 @@ def dashboard_top_merchants(month: str | None = None, db: Session = Depends(get_
 def dashboard_comparison(month: str | None = None, db: Session = Depends(get_db)):
     """지난달 대비 증감"""
     return dashboard.comparison(db, month)
+
+
+@app.get("/dashboard/cashflow")
+def dashboard_cashflow(month: str | None = None, db: Session = Depends(get_db)):
+    """이번 달 현금 흐름 (수입/소비/저축/투자/이체/순변화)"""
+    return dashboard.cashflow(db, month)
 
 
 # ── 분석 ──
@@ -180,6 +187,23 @@ def delete_merchant_rule(rule_id: int, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="규칙을 찾을 수 없음")
     db.delete(rule)
     db.commit()
+
+
+@app.post("/merchant-rules/apply")
+def apply_rules_existing(db: Session = Depends(get_db)):
+    """기존 '미분류' 거래에 규칙을 적용해 카테고리·별칭 채움 (과거 데이터 정리)."""
+    rules = db.query(models.MerchantRule).order_by(models.MerchantRule.priority.desc()).all()
+    updated = 0
+    for tx in db.query(models.Transaction).filter(models.Transaction.category_id.is_(None)).all():
+        raw = tx.raw_merchant or tx.alias or ""
+        cat_id, alias = _classify(raw, rules)
+        if cat_id is not None:
+            tx.category_id = cat_id
+            if alias:
+                tx.alias = alias
+            updated += 1
+    db.commit()
+    return {"updated": updated}
 
 
 def _classify(raw: str, rules: list[models.MerchantRule]) -> tuple[int | None, str | None]:

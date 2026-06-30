@@ -1,10 +1,11 @@
-"""분석 화면 집계. (시작월, 끝월) 범위를 받아 버킷(월/분기/연)으로 묶어 월평균을 낸다."""
+"""분석 화면 집계. (시작월, 끝월) 범위를 버킷(월/분기/연)으로 묶어 월평균을 낸다.
+지출 집계는 '소비'만 (저축/투자/이체 같은 비소비는 제외 — 현금흐름은 대시보드에서)."""
 from collections import defaultdict
-from datetime import date
+from datetime import date, timedelta
 
 from sqlalchemy.orm import Session
 
-from . import models
+from . import kinds, models
 
 
 def month_list(start_ym: str, end_ym: str) -> list[str]:
@@ -21,7 +22,6 @@ def month_list(start_ym: str, end_ym: str) -> list[str]:
 
 
 def _bucket_size(n: int) -> int:
-    """막대를 ~6~8개로 유지: 구간 길이에 따라 묶는 달 수."""
     if n <= 8:
         return 1   # 월
     if n <= 24:
@@ -47,12 +47,10 @@ def _range_bounds(start_ym: str, end_ym: str) -> tuple[date, date]:
     return first, end_excl
 
 
-# 기본 월예산은 period='*' 센티넬로 저장 (Budget.period가 NOT NULL이라 None 못 씀)
-DEFAULT_PERIOD = "*"
+DEFAULT_PERIOD = "*"  # 기본 월예산은 period='*'로 저장 (Budget.period가 NOT NULL)
 
 
 def _get_budgets(db: Session) -> tuple[float | None, dict[str, float]]:
-    """기본 월예산(period='*') + 월별 덮어쓰기(period='YYYY-MM')."""
     rows = db.query(models.Budget).filter(models.Budget.scope_type == "total").all()
     default = None
     overrides: dict[str, float] = {}
@@ -77,22 +75,35 @@ def _top_resolver(db: Session):
 
 
 def build(db: Session, start_ym: str, end_ym: str, merchant_sort: str = "amount") -> dict:
-    """분석 화면에 필요한 모든 집계를 한 번에."""
     months = month_list(start_ym, end_ym)
     size = _bucket_size(len(months))
     buckets = [months[i:i + size] for i in range(0, len(months), size)]
     first, end_excl = _range_bounds(start_ym, end_ym)
     default_budget, overrides = _get_budgets(db)
+    resolve = _top_resolver(db)
 
     txs = db.query(models.Transaction).filter(
         models.Transaction.date >= first, models.Transaction.date < end_excl
     ).all()
 
-    # 월별 수입/지출
+    def top_of(t):
+        return resolve(t.category_id) if t.category_id else None
+
+    def is_consumption(t) -> bool:
+        """소비 지출인가 (저축/투자/이체 같은 비소비는 False)."""
+        if t.type != "expense":
+            return False
+        top = top_of(t)
+        return kinds.kind_of(top.name if top else None) == "consumption"
+
+    # 월별 수입 / 소비
     m_inc, m_exp = defaultdict(float), defaultdict(float)
     for t in txs:
         ym = t.date.strftime("%Y-%m")
-        (m_inc if t.type == "income" else m_exp)[ym] += float(t.amount)
+        if t.type == "income":
+            m_inc[ym] += float(t.amount)
+        elif is_consumption(t):
+            m_exp[ym] += float(t.amount)
 
     # 추이 막대 (버킷별 월평균)
     trend = []
@@ -105,14 +116,14 @@ def build(db: Session, start_ym: str, end_ym: str, merchant_sort: str = "amount"
             budget = sum(overrides.get(m, default_budget) for m in grp) / k
         trend.append({
             "label": _bucket_label(grp, size),
-            "months": grp,                  # 이 막대에 속한 월들 (월 단위면 1개 → 예산 편집 대상)
+            "months": grp,
             "income": round(inc),
             "expense": round(exp),
             "budget": round(budget) if budget is not None else None,
             "over": budget is not None and exp > budget,
         })
 
-    # KPI
+    # KPI (소비 기준)
     total_inc = sum(m_inc.values())
     total_exp = sum(m_exp.values())
     n = len(months)
@@ -124,14 +135,13 @@ def build(db: Session, start_ym: str, end_ym: str, merchant_sort: str = "amount"
         "savings_rate": round(savings / total_inc * 100) if total_inc else None,
     }
 
-    # 카테고리 도넛 (대분류 지출)
-    resolve = _top_resolver(db)
+    # 카테고리 도넛 (소비 지출만)
     cat_agg: dict[str, dict] = {}
     for t in txs:
-        if t.type != "expense" or t.category_id is None:
+        if not is_consumption(t):
             continue
-        top = resolve(t.category_id)
-        if top is None:
+        top = top_of(t)
+        if top is None:    # 미분류는 도넛에서 제외
             continue
         e = cat_agg.setdefault(top.name, {"name": top.name, "color": top.color, "amount": 0.0})
         e["amount"] += float(t.amount)
@@ -141,18 +151,23 @@ def build(db: Session, start_ym: str, end_ym: str, merchant_sort: str = "amount"
         e["amount"] = round(e["amount"])
         e["pct"] = round(e["amount"] / cat_total * 100) if cat_total else 0
 
-    # 요일별 지출
+    # 요일별 소비 (일평균 = 그 요일 합 ÷ 기간 내 그 요일 수)
     wd_names = ["월", "화", "수", "목", "금", "토", "일"]
-    wd = defaultdict(float)
+    wd_sum = defaultdict(float)
     for t in txs:
-        if t.type == "expense":
-            wd[t.date.weekday()] += float(t.amount)
-    weekday = [{"day": wd_names[i], "amount": round(wd.get(i, 0))} for i in range(7)]
+        if is_consumption(t):
+            wd_sum[t.date.weekday()] += float(t.amount)
+    wd_count = [0] * 7
+    d = first
+    while d < end_excl:
+        wd_count[d.weekday()] += 1
+        d += timedelta(days=1)
+    weekday = [{"day": wd_names[i], "amount": round(wd_sum.get(i, 0) / wd_count[i]) if wd_count[i] else 0} for i in range(7)]
 
-    # 가맹점 TOP
+    # 가맹점 TOP (소비만)
     mch: dict[str, dict] = {}
     for t in txs:
-        if t.type != "expense":
+        if not is_consumption(t):
             continue
         name = t.alias or t.raw_merchant
         if not name:
