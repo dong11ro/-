@@ -90,6 +90,7 @@ class MerchantRuleCreate(BaseModel):
     category_id: int
     alias: Optional[str] = None
     priority: int = 0
+    is_fixed: bool = False
 
 
 class MerchantRuleRead(BaseModel):
@@ -99,6 +100,7 @@ class MerchantRuleRead(BaseModel):
     category_id: int
     alias: Optional[str]
     priority: int
+    is_fixed: Optional[bool] = False
 
     model_config = {"from_attributes": True}
 
@@ -112,6 +114,7 @@ class ImportCandidate(BaseModel):
     alias: Optional[str] = None          # 정리된 이름
     memo: Optional[str] = None
     category_id: Optional[int] = None
+    is_fixed: bool = False
     save_rule: bool = False              # 체크 시 이 분류를 규칙으로 저장
 
 

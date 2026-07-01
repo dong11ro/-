@@ -196,22 +196,24 @@ def apply_rules_existing(db: Session = Depends(get_db)):
     updated = 0
     for tx in db.query(models.Transaction).filter(models.Transaction.category_id.is_(None)).all():
         raw = tx.raw_merchant or tx.alias or ""
-        cat_id, alias = _classify(raw, rules)
+        cat_id, alias, is_fixed = _classify(raw, rules)
         if cat_id is not None:
             tx.category_id = cat_id
             if alias:
                 tx.alias = alias
+            if is_fixed:
+                tx.is_fixed = True
             updated += 1
     db.commit()
     return {"updated": updated}
 
 
-def _classify(raw: str, rules: list[models.MerchantRule]) -> tuple[int | None, str | None]:
-    """가맹점 원문에 키워드가 포함된 규칙을 찾아 (category_id, alias) 반환. 우선순위순."""
+def _classify(raw: str, rules: list[models.MerchantRule]) -> tuple[int | None, str | None, bool]:
+    """가맹점 원문에 키워드가 포함된 규칙을 찾아 (category_id, alias, is_fixed) 반환. 우선순위순."""
     for r in rules:
         if r.keyword and r.keyword in raw:
-            return r.category_id, r.alias
-    return None, None
+            return r.category_id, r.alias, bool(r.is_fixed)
+    return None, None, False
 
 
 # ── 파일 가져오기 ──
@@ -225,10 +227,11 @@ async def import_preview(
     rules = db.query(models.MerchantRule).order_by(models.MerchantRule.priority.desc()).all()
     for c in candidates:
         raw = c.get("merchant") or ""
-        cat_id, alias = _classify(raw, rules)
+        cat_id, alias, is_fixed = _classify(raw, rules)
         c["category_id"] = cat_id
         c["alias"] = alias or raw or None   # 규칙 별칭 있으면 그걸로, 없으면 원문
         c["matched"] = cat_id is not None
+        c["is_fixed"] = is_fixed
         # 중복 감지: 같은 지문 거래가 이미 DB에 있나
         ext = importer.fingerprint(c["date"], c["type"], c["amount"], raw)
         c["duplicate"] = db.query(models.Transaction.id).filter(
@@ -251,6 +254,7 @@ def import_commit(payload: schemas.ImportCommit, db: Session = Depends(get_db)):
             memo=it.memo,
             category_id=it.category_id,
             source="csv",
+            is_fixed=it.is_fixed,
             external_ref=importer.fingerprint(it.date.isoformat(), it.type, it.amount, it.merchant),
         ))
         n += 1
@@ -258,7 +262,7 @@ def import_commit(payload: schemas.ImportCommit, db: Session = Depends(get_db)):
         if it.save_rule and it.alias and it.category_id:
             exists = db.query(models.MerchantRule).filter(models.MerchantRule.keyword == it.alias).first()
             if not exists:
-                db.add(models.MerchantRule(keyword=it.alias, category_id=it.category_id, alias=it.alias))
+                db.add(models.MerchantRule(keyword=it.alias, category_id=it.category_id, alias=it.alias, is_fixed=it.is_fixed))
     db.commit()
     return {"inserted": n}
 

@@ -16,8 +16,9 @@ type Candidate = {
   save_rule: boolean;
   duplicate: boolean;
   include: boolean;
+  is_fixed: boolean;
 };
-type Rule = { id: number; keyword: string; category_id: number; alias: string | null; priority: number };
+type Rule = { id: number; keyword: string; category_id: number; alias: string | null; priority: number; is_fixed: boolean };
 
 export default function ImportView() {
   const [candidates, setCandidates] = useState<Candidate[]>([]);
@@ -30,6 +31,7 @@ export default function ImportView() {
   const [newKw, setNewKw] = useState("");
   const [newCat, setNewCat] = useState("");
   const [newAlias, setNewAlias] = useState("");
+  const [newFixed, setNewFixed] = useState(false);
 
   const loadRules = () => fetch(`${API}/merchant-rules`).then((r) => r.json()).then(setRules);
   useEffect(() => {
@@ -102,9 +104,9 @@ export default function ImportView() {
     await fetch(`${API}/merchant-rules`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ keyword: newKw.trim(), category_id: Number(newCat), alias: newAlias.trim() || newKw.trim(), priority: 0 }),
+      body: JSON.stringify({ keyword: newKw.trim(), category_id: Number(newCat), alias: newAlias.trim() || newKw.trim(), priority: 0, is_fixed: newFixed }),
     });
-    setNewKw(""); setNewCat(""); setNewAlias("");
+    setNewKw(""); setNewCat(""); setNewAlias(""); setNewFixed(false);
     loadRules();
   }
 
@@ -116,7 +118,7 @@ export default function ImportView() {
     await fetch(`${API}/merchant-rules/${r.id}`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ keyword: r.keyword, category_id: r.category_id, alias: r.alias, priority: r.priority }),
+      body: JSON.stringify({ keyword: r.keyword, category_id: r.category_id, alias: r.alias, priority: r.priority, is_fixed: r.is_fixed }),
     });
     loadRules();
   }
@@ -229,6 +231,7 @@ export default function ImportView() {
             {catOptions()}
           </select>
           <input placeholder="별칭(선택)" value={newAlias} onChange={(e) => setNewAlias(e.target.value)} style={S.ruleAlias} />
+          <label style={S.ruleFixed}><input type="checkbox" checked={newFixed} onChange={(e) => setNewFixed(e.target.checked)} /> 고정</label>
           <button onClick={addRule} disabled={!newKw.trim() || !newCat} style={{ ...S.ruleAdd, opacity: !newKw.trim() || !newCat ? 0.4 : 1 }}>추가</button>
         </div>
 
@@ -244,6 +247,7 @@ export default function ImportView() {
                   {catOptions()}
                 </select>
                 <input value={r.alias ?? ""} onChange={(e) => updateRule(r.id, { alias: e.target.value })} placeholder="별칭" style={S.ruleAlias} />
+                <label style={S.ruleFixed}><input type="checkbox" checked={r.is_fixed} onChange={(e) => updateRule(r.id, { is_fixed: e.target.checked })} /> 고정</label>
                 <button onClick={() => saveRule(r)} style={S.ruleSave}>저장</button>
                 <button onClick={() => deleteRule(r.id)} style={S.ruleDel}>삭제</button>
               </div>
@@ -290,6 +294,7 @@ const S: Record<string, any> = {
   ruleKw: { flex: "1 1 130px", minWidth: 0, padding: "7px 9px", borderRadius: 7, border: "1px solid #d1d5db", fontSize: 13, fontFamily: "inherit", fontWeight: 600 },
   ruleCat: { flex: "1 1 120px", minWidth: 0, padding: "7px 8px", borderRadius: 7, border: "1px solid #d1d5db", fontSize: 12.5, fontFamily: "inherit", background: "white" },
   ruleAlias: { flex: "1 1 100px", minWidth: 0, padding: "7px 9px", borderRadius: 7, border: "1px solid #d1d5db", fontSize: 13, fontFamily: "inherit" },
+  ruleFixed: { display: "flex", alignItems: "center", gap: 4, fontSize: 12, color: "#6b7280", flexShrink: 0, cursor: "pointer" },
   ruleAdd: { padding: "7px 14px", background: "#3b82f6", color: "white", border: "none", borderRadius: 8, fontSize: 13, fontWeight: 600, fontFamily: "inherit", cursor: "pointer", flexShrink: 0 },
   ruleSave: { padding: "7px 12px", background: "#eff6ff", color: "#1d4ed8", border: "1px solid #dbeafe", borderRadius: 8, fontSize: 12.5, fontWeight: 600, fontFamily: "inherit", cursor: "pointer", flexShrink: 0 },
   ruleDel: { padding: "7px 11px", background: "white", border: "1px solid #e5e7eb", borderRadius: 8, fontSize: 12.5, color: "#6b7280", cursor: "pointer", flexShrink: 0 },

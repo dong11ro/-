@@ -74,6 +74,7 @@ class MerchantRule(Base):
     category_id = Column(Integer, ForeignKey("categories.id"))
     alias = Column(String)
     priority = Column(Integer, default=0)              # 우선순위
+    is_fixed = Column(Boolean, default=False)          # 매칭 거래를 고정지출로 표시
 
 
 class Budget(Base):
