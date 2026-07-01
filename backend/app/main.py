@@ -263,6 +263,71 @@ def import_commit(payload: schemas.ImportCommit, db: Session = Depends(get_db)):
     return {"inserted": n}
 
 
+# ── 고정 지출 템플릿 ──
+@app.get("/templates", response_model=list[schemas.RecurringTemplateRead])
+def list_templates(db: Session = Depends(get_db)):
+    """고정 지출 템플릿 목록"""
+    return db.query(models.RecurringTemplate).order_by(models.RecurringTemplate.id).all()
+
+
+@app.post("/templates", response_model=schemas.RecurringTemplateRead, status_code=201)
+def create_template(payload: schemas.RecurringTemplateCreate, db: Session = Depends(get_db)):
+    """템플릿 생성"""
+    tpl = models.RecurringTemplate(**payload.model_dump())
+    db.add(tpl)
+    db.commit()
+    db.refresh(tpl)
+    return tpl
+
+
+@app.put("/templates/{tid}", response_model=schemas.RecurringTemplateRead)
+def update_template(tid: int, payload: schemas.RecurringTemplateCreate, db: Session = Depends(get_db)):
+    """템플릿 수정"""
+    tpl = db.get(models.RecurringTemplate, tid)
+    if tpl is None:
+        raise HTTPException(status_code=404, detail="템플릿을 찾을 수 없음")
+    for field, value in payload.model_dump().items():
+        setattr(tpl, field, value)
+    db.commit()
+    db.refresh(tpl)
+    return tpl
+
+
+@app.delete("/templates/{tid}", status_code=204)
+def delete_template(tid: int, db: Session = Depends(get_db)):
+    """템플릿 삭제"""
+    tpl = db.get(models.RecurringTemplate, tid)
+    if tpl is None:
+        raise HTTPException(status_code=404, detail="템플릿을 찾을 수 없음")
+    db.delete(tpl)
+    db.commit()
+
+
+@app.post("/templates/{tid}/add", response_model=schemas.TransactionRead, status_code=201)
+def add_from_template(tid: int, payload: schemas.TemplateAdd, db: Session = Depends(get_db)):
+    """템플릿을 오늘(또는 지정일) 거래로 추가. 고정지출(is_fixed=True)로 기록."""
+    tpl = db.get(models.RecurringTemplate, tid)
+    if tpl is None:
+        raise HTTPException(status_code=404, detail="템플릿을 찾을 수 없음")
+    amount = payload.amount if payload.amount is not None else tpl.amount
+    if amount is None:
+        raise HTTPException(status_code=400, detail="금액이 필요합니다")
+    tx = models.Transaction(
+        date=payload.date or date_type.today(),
+        type="expense",
+        amount=amount,
+        category_id=tpl.category_id,
+        payment_method_id=tpl.payment_method_id,
+        alias=tpl.name,
+        source="template",
+        is_fixed=True,
+    )
+    db.add(tx)
+    db.commit()
+    db.refresh(tx)
+    return tx
+
+
 @app.get("/saved-filters", response_model=list[schemas.SavedFilterRead])
 def list_saved_filters(db: Session = Depends(get_db)):
     """필터 즐겨찾기 목록"""

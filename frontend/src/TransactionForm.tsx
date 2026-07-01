@@ -26,6 +26,7 @@ export default function TransactionForm({
   const [memo, setMemo] = useState(initial?.memo ?? "");
   const [tags, setTags] = useState<string[]>(initial?.tags ?? []);
   const [tagInput, setTagInput] = useState("");
+  const [isFixed, setIsFixed] = useState(initial?.is_fixed ?? false);
 
   // 현재 유형(수입/지출)에 맞는 카테고리만, 대분류 > 소분류 그룹으로
   const grouped = useMemo(() => {
@@ -54,6 +55,7 @@ export default function TransactionForm({
       payment_method_id: methodId ? Number(methodId) : null,
       alias: alias || null,
       memo: memo || null,
+      is_fixed: isFixed,
       tags,
     });
   }
@@ -130,6 +132,12 @@ export default function TransactionForm({
         </div>
       </div>
 
+      {/* 고정지출 마킹 */}
+      <label style={S.fixedRow}>
+        <input type="checkbox" checked={isFixed} onChange={(e) => setIsFixed(e.target.checked)} />
+        <span>고정지출 (월세·통신·구독 등 — 분석의 가맹점/요일별에서 제외)</span>
+      </label>
+
       <div style={S.actions}>
         <button type="button" onClick={onCancel} style={S.cancel}>취소</button>
         <button type="submit" style={S.submit}>{submitLabel}</button>
@@ -151,6 +159,7 @@ const S: Record<string, any> = {
   tagChip: { display: "inline-flex", alignItems: "center", gap: 4, background: "#eff6ff", color: "#1d4ed8", fontSize: 13, fontWeight: 500, padding: "3px 8px", borderRadius: 6 },
   tagX: { cursor: "pointer", color: "#93c5fd", fontWeight: 700 },
   tagInput: { flex: 1, minWidth: 80, border: "none", outline: "none", fontSize: 14, fontFamily: "inherit" },
+  fixedRow: { display: "flex", alignItems: "center", gap: 8, fontSize: 12.5, color: "#6b7280", marginBottom: 12, cursor: "pointer" },
   actions: { display: "flex", gap: 8, marginTop: 8 },
   cancel: { flex: 1, padding: "11px 0", background: "#f1f5f9", color: "#374151", border: "none", borderRadius: 10, fontSize: 15, fontWeight: 600, cursor: "pointer" },
   submit: { flex: 2, padding: "11px 0", background: "#3b82f6", color: "white", border: "none", borderRadius: 10, fontSize: 15, fontWeight: 600, cursor: "pointer" },
