@@ -64,6 +64,8 @@ export default function BudgetView() {
     load();
   }
 
+  const onEnter = (e: React.KeyboardEvent<HTMLInputElement>) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); };
+
   if (!data) return <div style={S.page}>불러오는 중…</div>;
   const [y, m] = month.split("-").map(Number);
   const t = data.total;
@@ -85,7 +87,8 @@ export default function BudgetView() {
         <div style={S.totalHead}>
           <span style={S.cardTitle}>전체 예산 {t.status && <span style={{ ...S.badge, background: STATUS[t.status].bar + "22", color: STATUS[t.status].text }}>{STATUS[t.status].label}</span>}{t.is_override && <span style={S.ovBadge}>이 달만</span>}</span>
           <div style={S.setBox}>
-            <input value={inputs.total ?? ""} onChange={(e) => setInputs({ ...inputs, total: e.target.value })} onBlur={() => saveBudget("total", null, "total", "*")} placeholder="기본 월예산" style={S.setInput} />
+            <input value={inputs.total ?? ""} onChange={(e) => setInputs({ ...inputs, total: e.target.value })} onBlur={() => saveBudget("total", null, "total", "*")} onKeyDown={onEnter} placeholder="기본 월예산" style={S.setInput} />
+            <button onClick={() => saveBudget("total", null, "total", "*")} style={S.saveBtn}>저장</button>
             <button onClick={() => setOverride("total", null, "전체")} style={S.ovBtn}>이 달만</button>
           </div>
         </div>
@@ -120,7 +123,8 @@ export default function BudgetView() {
               </div>
               <div style={S.barBg}><div style={{ ...S.barFill, width: `${pct(c.spent, c.budget)}%`, background: c.budget != null ? STATUS[c.status ?? "ok"].bar : "#e5e7eb" }} /></div>
               <div style={S.catSet}>
-                <input value={inputs["c" + c.id] ?? ""} onChange={(e) => setInputs({ ...inputs, ["c" + c.id]: e.target.value })} onBlur={() => saveBudget("category", c.id, "c" + c.id, "*")} placeholder="예산 없음" style={S.catInput} />
+                <input value={inputs["c" + c.id] ?? ""} onChange={(e) => setInputs({ ...inputs, ["c" + c.id]: e.target.value })} onBlur={() => saveBudget("category", c.id, "c" + c.id, "*")} onKeyDown={onEnter} placeholder="예산 없음" style={S.catInput} />
+                <button onClick={() => saveBudget("category", c.id, "c" + c.id, "*")} style={S.saveBtnSm}>저장</button>
                 <button onClick={() => setOverride("category", c.id, c.name)} style={S.ovBtnSm}>이 달만</button>
               </div>
             </div>
@@ -156,6 +160,8 @@ const S: Record<string, any> = {
   totalHead: { display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, marginBottom: 12, flexWrap: "wrap" },
   setBox: { display: "flex", gap: 6, alignItems: "center" },
   setInput: { padding: "6px 10px", borderRadius: 8, border: "1px solid #d1d5db", fontSize: 13, fontFamily: "inherit", width: 120 },
+  saveBtn: { padding: "6px 12px", background: "#3b82f6", color: "white", border: "none", borderRadius: 8, fontSize: 12.5, fontWeight: 600, fontFamily: "inherit", cursor: "pointer" },
+  saveBtnSm: { padding: "5px 10px", background: "#3b82f6", color: "white", border: "none", borderRadius: 7, fontSize: 11.5, fontWeight: 600, fontFamily: "inherit", cursor: "pointer" },
   ovBtn: { padding: "6px 10px", background: "#f9fafb", border: "1px solid #e5e7eb", borderRadius: 8, fontSize: 12, color: "#6b7280", fontFamily: "inherit", cursor: "pointer" },
   bigNum: { fontSize: 24, fontWeight: 700, letterSpacing: "-0.5px", fontVariantNumeric: "tabular-nums", marginBottom: 12 },
   ofBudget: { fontSize: 15, color: "#9ca3af", fontWeight: 600 },
