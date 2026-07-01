@@ -1,5 +1,5 @@
 // 사이드바 화면 전환
-export type View = "dashboard" | "transactions" | "import" | "analysis" | "fixed";
+export type View = "dashboard" | "transactions" | "import" | "analysis" | "fixed" | "budget";
 
 // 백엔드 응답 형태 (App과 TransactionForm이 공유)
 export type Category = { id: number; name: string; type: string; parent_id: number | null; color: string | null };

@@ -6,8 +6,9 @@ const ITEMS: { key: View; label: string }[] = [
   { key: "import", label: "가져오기" },
   { key: "analysis", label: "분석" },
   { key: "fixed", label: "고정 지출" },
+  { key: "budget", label: "예산" },
 ];
-const SOON = ["예산", "설정"]; // 아직 미구현 (디자인 자리만)
+const SOON = ["설정"]; // 아직 미구현 (디자인 자리만)
 
 export default function Sidebar({ view, onChange }: { view: View; onChange: (v: View) => void }) {
   return (

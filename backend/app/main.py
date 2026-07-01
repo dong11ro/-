@@ -7,7 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import delete
 from sqlalchemy.orm import Session
 
-from . import analysis, dashboard, importer, models, schemas
+from . import analysis, budget, dashboard, importer, models, schemas
 from .database import SessionLocal, get_db
 from .seed import backfill_category_colors, backfill_noncon_categories, seed_defaults
 
@@ -111,7 +111,22 @@ def analysis_build(start: str, end: str, merchant_sort: str = "amount", db: Sess
     return analysis.build(db, start, end, merchant_sort)
 
 
-# ── 총예산 (기본 월예산 + 월별 덮어쓰기) ──
+# ── 예산 ──
+@app.get("/budget/status")
+def budget_status(month: str | None = None, db: Session = Depends(get_db)):
+    """예산 현황 (총예산 + 대분류별, 이번 달 소비 대비)"""
+    return budget.get_status(db, month)
+
+
+@app.put("/budget/set")
+def budget_set(payload: schemas.BudgetSetGeneric, db: Session = Depends(get_db)):
+    """예산 설정/해제 (총예산·카테고리, 기본='*' 또는 특정 달='YYYY-MM')"""
+    amt = float(payload.amount) if payload.amount is not None else None
+    budget.set_budget(db, payload.scope_type, payload.scope_ref, payload.period, amt)
+    return {"ok": True}
+
+
+# ── 총예산 (기본 월예산 + 월별 덮어쓰기) — 분석 화면용 (기존) ──
 @app.get("/budget/total")
 def get_total_budget(db: Session = Depends(get_db)):
     default, overrides = analysis._get_budgets(db)

@@ -38,6 +38,7 @@ export default function DashboardView() {
   const [merchants, setMerchants] = useState<Merchant[]>([]);
   const [comparison, setComparison] = useState<Comparison | null>(null);
   const [cashflow, setCashflow] = useState<{ income: number; consumption: number; saving: number; investment: number; transfer: number; net: number } | null>(null);
+  const [budget, setBudget] = useState<{ total: { budget: number | null; spent: number; remaining: number | null; status: string | null }; categories: { name: string; status: string | null }[] } | null>(null);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [pickerYear, setPickerYear] = useState(() => new Date().getFullYear());
 
@@ -48,6 +49,7 @@ export default function DashboardView() {
     fetch(`${API}/dashboard/top-merchants${q}`).then((r) => r.json()).then(setMerchants);
     fetch(`${API}/dashboard/comparison${q}`).then((r) => r.json()).then(setComparison);
     fetch(`${API}/dashboard/cashflow${q}`).then((r) => r.json()).then(setCashflow);
+    fetch(`${API}/budget/status${q}`).then((r) => r.json()).then(setBudget);
   }, [month]);
 
   const [y, m] = month.split("-").map(Number);
@@ -154,6 +156,27 @@ export default function DashboardView() {
           </div>
         </div>
       )}
+
+      {/* 예산 현황 (간략) */}
+      {budget && budget.total.budget != null && (() => {
+        const st = budget.total.status ?? "ok";
+        const C = ({ ok: "#22c55e", near: "#f59e0b", over: "#ef4444" } as Record<string, string>)[st];
+        const p = Math.min(100, (budget.total.spent / budget.total.budget!) * 100);
+        const warns = budget.categories.filter((c) => c.status === "over" || c.status === "near");
+        return (
+          <div style={S.cfCard}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+              <span style={S.cfTitle}>예산 현황</span>
+              <span style={{ fontSize: 13, fontWeight: 700, fontVariantNumeric: "tabular-nums" }}>{won(budget.total.spent)} <span style={{ color: "#9ca3af" }}>/ {won(budget.total.budget!)}</span></span>
+            </div>
+            <div style={{ height: 9, background: "#f1f5f9", borderRadius: 5, overflow: "hidden" }}><div style={{ height: "100%", width: `${p}%`, background: C, borderRadius: 5 }} /></div>
+            <div style={{ fontSize: 12, color: "#6b7280", marginTop: 8 }}>
+              남음 {won(budget.total.remaining ?? 0)}
+              {warns.length > 0 && <span style={{ color: "#dc2626", fontWeight: 600 }}> · {warns.map((w) => `${w.name} ${w.status === "over" ? "초과" : "임박"}`).join(", ")}</span>}
+            </div>
+          </div>
+        );
+      })()}
 
       <div style={S.twoCol}>
         {/* 상위 지출 카테고리 */}
