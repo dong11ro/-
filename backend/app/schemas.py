@@ -155,6 +155,14 @@ class BudgetSet(BaseModel):
     amount: Optional[Decimal] = None
 
 
+class BudgetSetGeneric(BaseModel):
+    """예산 설정 (총예산/카테고리, 기본/특정달)"""
+    scope_type: str                        # total | category
+    scope_ref: Optional[int] = None        # 카테고리면 대분류 id
+    period: str = "*"                      # '*'=기본(반복), 'YYYY-MM'=그 달만
+    amount: Optional[Decimal] = None       # null이면 해제
+
+
 class MonthBudgetSet(BaseModel):
     """특정 달 예산 덮어쓰기"""
     month: str

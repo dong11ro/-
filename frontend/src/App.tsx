@@ -5,6 +5,7 @@ import DashboardView from "./DashboardView";
 import ImportView from "./ImportView";
 import AnalysisView from "./AnalysisView";
 import FixedView from "./FixedView";
+import BudgetView from "./BudgetView";
 import type { View } from "./types";
 
 // 앱 셸: 사이드바 + 선택된 화면
@@ -18,6 +19,7 @@ export default function App() {
           : view === "import" ? <ImportView />
           : view === "analysis" ? <AnalysisView />
           : view === "fixed" ? <FixedView />
+          : view === "budget" ? <BudgetView />
           : <TransactionsView />}
       </div>
     </div>
