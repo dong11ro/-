@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import type { Category, PaymentMethod } from "./types";
 
-const API = "http://localhost:8000";
+const API = `http://${location.hostname}:8000`;
 const won = (n: number | string) => "₩" + Math.abs(Number(n)).toLocaleString("ko-KR");
 
 type Template = {

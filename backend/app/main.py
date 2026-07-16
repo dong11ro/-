@@ -28,10 +28,11 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="가계부 API", lifespan=lifespan)
 
-# 프론트엔드(localhost:5173)에서 API 호출 허용 (개발용)
+# 프론트엔드(:5173)에서 API 호출 허용 (개발용)
+# LAN의 다른 기기에서도 접속하므로 localhost뿐 아니라 사설 IP(192.168.x, 10.x, 172.16~31.x)도 허용한다.
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173"],
+    allow_origin_regex=r"http://(localhost|127\.0\.0\.1|10\.\d+\.\d+\.\d+|192\.168\.\d+\.\d+|172\.(1[6-9]|2\d|3[01])\.\d+\.\d+):5173",
     allow_methods=["*"],
     allow_headers=["*"],
 )
