@@ -5,7 +5,7 @@ import TagManager from "./TagManager";
 import SavedFilters from "./SavedFilters";
 import type { Category, PaymentMethod, SavedFilter, Tag, Transaction } from "./types";
 
-const API = "http://localhost:8000";
+const API = `http://${location.hostname}:8000`;
 
 const won = (n: string | number) => "₩" + Math.abs(Number(n)).toLocaleString("ko-KR");
 

@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 
-const API = "http://localhost:8000";
+const API = `http://${location.hostname}:8000`;
 
 // 만/억 단위 포맷 (차트 라벨용)
 function fmtW(n: number): string {

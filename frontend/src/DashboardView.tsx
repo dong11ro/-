@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 
-const API = "http://localhost:8000";
+const API = `http://${location.hostname}:8000`;
 const won = (n: number) => "₩" + Math.abs(n).toLocaleString("ko-KR");
 
 // 백엔드 응답 형태
